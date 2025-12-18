@@ -147,6 +147,20 @@ export async function POST(request) {
       finalProjectCode = generateProjectCode(city, developer.name, sequence, year);
     }
 
+    // Prepare configurations for DB (initial - will update after unit plan uploads)
+    let configurationsForDb = (configurations || []).map(config => ({
+      type: config.type,
+      is_range: config.is_range,
+      units_available: config.units_available,
+      area_min: config.area_min,
+      area_max: config.area_max,
+      area_unit: config.area_unit,
+      price_min: config.price_min,
+      price_max: config.price_max,
+      currency: config.currency,
+      unit_plan_ids: [],
+    }));
+
     // Insert project
     const result = await query(
       `INSERT INTO project_details (
@@ -176,7 +190,7 @@ export async function POST(request) {
         featured || false,
         location_link || null,
         video_url || null,
-        configurations ? JSON.stringify(configurations) : null,
+        JSON.stringify(configurationsForDb),
         booking_amount || null,
         payment_plan || null,
         roi || null,
@@ -265,22 +279,6 @@ export async function POST(request) {
       }
     }
 
-    // Handle unit plans
-    const unitplanCount = parseInt(formData.get('unitplan_count') || '0');
-    for (let i = 0; i < unitplanCount; i++) {
-      const file = formData.get(`unitplan_${i}`);
-      if (file && file instanceof File && file.size > 0) {
-        const validation = validateFile(file, 'unitplan');
-        if (validation.valid) {
-          const filePath = await saveSingleFile(file, 'unitplan', projectId);
-          await query(
-            'INSERT INTO project_files (project_id, file_name, file_type, file_path) VALUES (?, ?, ?, ?)',
-            [projectId, file.name, 'unitplan', filePath]
-          );
-        }
-      }
-    }
-
     // Handle payment plans
     const paymentplanCount = parseInt(formData.get('paymentplan_count') || '0');
     for (let i = 0; i < paymentplanCount; i++) {
@@ -297,14 +295,66 @@ export async function POST(request) {
       }
     }
 
-    // Insert nearby locations with place_link
+    // ============ HANDLE CONFIG-WISE UNIT PLANS ============
+    const configUnitPlanMetaStr = formData.get('config_unitplan_meta');
+    const configUnitPlanMeta = configUnitPlanMetaStr ? JSON.parse(configUnitPlanMetaStr) : [];
+
+    let configurationsUpdated = false;
+
+    for (const meta of configUnitPlanMeta) {
+      const { configIndex, fileIndex } = meta;
+      const file = formData.get(`config_unitplan_${configIndex}_${fileIndex}`);
+
+      if (file && file instanceof File && file.size > 0) {
+        const validation = validateFile(file, 'unitplan');
+        if (validation.valid) {
+          // Save file
+          const filePath = await saveSingleFile(file, 'unitplan', projectId);
+
+          // Insert into project_files
+          const fileResult = await query(
+            'INSERT INTO project_files (project_id, file_name, file_type, file_path) VALUES (?, ?, ?, ?)',
+            [projectId, file.name, 'unitplan', filePath]
+          );
+
+          const fileId = fileResult.insertId;
+
+          // Add file_id to configuration's unit_plan_ids
+          if (configurationsForDb[configIndex]) {
+            if (!configurationsForDb[configIndex].unit_plan_ids) {
+              configurationsForDb[configIndex].unit_plan_ids = [];
+            }
+            configurationsForDb[configIndex].unit_plan_ids.push(fileId);
+            configurationsUpdated = true;
+          }
+        }
+      }
+    }
+
+    // Update configurations in DB if unit plans were added
+    if (configurationsUpdated) {
+      await query(
+        'UPDATE project_details SET configurations = ? WHERE project_id = ?',
+        [JSON.stringify(configurationsForDb), projectId]
+      );
+    }
+    // ============ END CONFIG-WISE UNIT PLANS ============
+
+    // Insert nearby locations
     if (nearby_locations && nearby_locations.length > 0) {
       for (const location of nearby_locations) {
         if (location.place_name) {
           await query(
             `INSERT INTO project_nearby (project_id, place_name, distance_value, distance_unit, category, place_link)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [projectId, location.place_name, location.distance_value, location.distance_unit, location.category, location.place_link || null]
+            [
+              projectId,
+              location.place_name,
+              location.distance_value,
+              location.distance_unit,
+              location.category,
+              location.place_link || null
+            ]
           );
         }
       }

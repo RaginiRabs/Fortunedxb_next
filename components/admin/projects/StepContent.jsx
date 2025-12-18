@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box,
@@ -10,9 +10,8 @@ import {
   Typography,
   IconButton,
   Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Autocomplete,
+  createFilterOptions,
 } from '@mui/material';
 import {
   ArrowForwardOutlined,
@@ -22,12 +21,48 @@ import {
   ExpandMore,
 } from '@mui/icons-material';
 import { useProjectForm } from '@/contexts/ProjectFormContext';
+import { AMENITIES } from '@/data/amenities';
+
+const filter = createFilterOptions();
 
 export default function StepContent() {
   const router = useRouter();
   const { formData, updateField, nextStep, prevStep, editMode, projectId } = useProjectForm();
+  
+  // Amenity input state
+  const [amenityInputValue, setAmenityInputValue] = useState('');
+  
+  // Highlight input state
   const [newHighlight, setNewHighlight] = useState('');
+  
+  // FAQ state
   const [expandedFaq, setExpandedFaq] = useState(null);
+
+  // Available amenities (not yet selected)
+  const availableAmenities = useMemo(() => {
+    return AMENITIES.filter(a => !formData.amenities.includes(a));
+  }, [formData.amenities]);
+
+  // Handle amenity selection
+  const handleAmenityChange = (event, newValue) => {
+    if (newValue) {
+      let amenityToAdd = newValue;
+      
+      if (typeof newValue === 'object' && newValue.inputValue) {
+        amenityToAdd = newValue.inputValue;
+      }
+      
+      if (amenityToAdd && !formData.amenities.includes(amenityToAdd)) {
+        updateField('amenities', [...formData.amenities, amenityToAdd]);
+      }
+    }
+    setAmenityInputValue('');
+  };
+
+  // Remove amenity
+  const handleRemoveAmenity = (amenity) => {
+    updateField('amenities', formData.amenities.filter(a => a !== amenity));
+  };
 
   // Highlights handlers
   const handleAddHighlight = () => {
@@ -64,10 +99,6 @@ export default function StepContent() {
     updateField('faqs', updated);
   };
 
-  const handleAccordionChange = (index) => (event, isExpanded) => {
-    setExpandedFaq(isExpanded ? index : null);
-  };
-
   const handleNext = () => {
     if (nextStep()) {
       const basePath = editMode ? `/admin/projects/edit/${projectId}` : '/admin/projects/add';
@@ -101,6 +132,91 @@ export default function StepContent() {
           onChange={(e) => updateField('about', e.target.value)}
           placeholder="Write a detailed description about the project..."
         />
+      </Card>
+
+      {/* Amenities Section - Moved from StepLocation */}
+      <Card
+        elevation={0}
+        sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Amenities
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {formData.amenities.length} selected
+          </Typography>
+        </Box>
+
+        <Autocomplete
+          freeSolo
+          selectOnFocus
+          clearOnBlur
+          handleHomeEndKeys
+          size="small"
+          options={availableAmenities}
+          value={null}
+          inputValue={amenityInputValue}
+          onInputChange={(event, newInputValue) => {
+            setAmenityInputValue(newInputValue);
+          }}
+          onChange={handleAmenityChange}
+          filterOptions={(options, params) => {
+            const filtered = filter(options, params);
+            const { inputValue } = params;
+            const isExisting = options.some((option) => inputValue.toLowerCase() === option.toLowerCase());
+            if (inputValue !== '' && !isExisting) {
+              filtered.push({
+                inputValue,
+                title: `Add "${inputValue}"`,
+              });
+            }
+            return filtered;
+          }}
+          getOptionLabel={(option) => {
+            if (typeof option === 'string') return option;
+            if (option.inputValue) return option.inputValue;
+            return option.title || '';
+          }}
+          renderOption={(props, option) => {
+            const { key, ...otherProps } = props;
+            if (typeof option === 'object' && option.title) {
+              return (
+                <li key={key} {...otherProps} style={{ color: '#B8860B', fontWeight: 500 }}>
+                  {option.title}
+                </li>
+              );
+            }
+            return <li key={key} {...otherProps}>{option}</li>;
+          }}
+          renderInput={(params) => (
+            <TextField {...params} placeholder="Search or type to add amenity..." />
+          )}
+          sx={{ mb: 2 }}
+        />
+
+        {formData.amenities.length > 0 ? (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+            {formData.amenities.map((amenity) => (
+              <Chip
+                key={amenity}
+                label={amenity}
+                size="small"
+                onDelete={() => handleRemoveAmenity(amenity)}
+                sx={{
+                  bgcolor: AMENITIES.includes(amenity) ? 'primary.main' : 'secondary.main',
+                  color: '#fff',
+                  '& .MuiChip-deleteIcon': { color: 'rgba(255,255,255,0.7)' },
+                  '& .MuiChip-deleteIcon:hover': { color: '#fff' },
+                }}
+              />
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+            No amenities selected yet
+          </Typography>
+        )}
       </Card>
 
       {/* Highlights Section */}

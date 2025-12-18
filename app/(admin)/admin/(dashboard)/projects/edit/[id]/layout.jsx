@@ -36,6 +36,7 @@ export default function EditProjectLayout({ children }) {
           price_min: config.price_min || '',
           price_max: config.price_max || '',
           currency: config.currency || 'AED',
+          unit_plan_ids: config.unit_plan_ids || [],
           // OLD fields like 'area', 'price' strings are NOT included
         }));
         
@@ -64,7 +65,7 @@ export default function EditProjectLayout({ children }) {
           
           // Use cleaned configurations
           configurations: cleanConfigurations,
-          
+          files: project.files,
           booking_amount: project.booking_amount || '',
           payment_plan: project.payment_plan || '',
           roi: project.roi || '',

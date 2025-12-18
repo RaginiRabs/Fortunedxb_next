@@ -1,118 +1,25 @@
 'use client';
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const ProjectFormContext = createContext(null);
 
 const STORAGE_KEY = 'project_form_data';
 
-// Initial form state
-const initialFormData = {
-  // Step 1: Basic Details
-  developer_id: '',
-  project_name: '',
-  sub_headline: '',
-  project_logo: null,
-  project_logo_preview: '',
-  city: 'Dubai',
-  country: 'UAE',
-  locality: '',
-  project_address: '', // NEW: Full physical address
-  project_code: '', // Auto-generated: DXB-EMR2025001
-  usage_type: '',
-  project_type: '',
-  project_status: '',
-
-  // Step 2: Project Information
-  total_towers: '',
-  total_units: '',
-  furnishing_status: '',
-  handover_date: '',
-  // REMOVED: completion_date
-  featured: false,
-  // REMOVED: youtube_link
-  location_link: '',
-
-  // Step 3: Pricing & Configuration
-  // Updated configuration structure with range support
-  configurations: [],
-  /* Configuration object structure:
-  {
-    type: 'Studio',
-    is_range: false,
-    area_min: '450',
-    area_max: '450',
-    area_unit: 'sqft',
-    price_min: '850000',
-    price_max: '850000',
-    currency: 'AED',
-    units_available: '10'
-  }
-  */
-  booking_amount: '',
-  payment_plan: '',
-  roi: '',
-
-  // Step 4: Content
-  about: '',
-  highlights: [],
-  faqs: [],
-
-  // Step 5: Location & Contact
-  amenities: [],
-  nearby_locations: [],
-  email_1: '',
-  email_2: '',
-  phone_1: '',
-  phone_1_ccode: '', // Country calling code (e.g., "971")
-  phone_2: '',
-  phone_2_ccode: '', // Country calling code (e.g., "971")
-
-  // Step 6: Media & SEO
-  gallery_images: [],
-  floor_plans: [],
-  brochure: null,
-  brochure_name: '',
-  video_url: '', // NEW: Video URL
-  // NEW: Additional file types
-  tax_sheets: [],
-  unit_plans: [],
-  payment_plans: [],
-  
-  // Existing files (for edit mode)
-  existing_gallery: [],
-  existing_floor_plans: [],
-  existing_brochure: null,
-  existing_tax_sheets: [],
-  existing_unit_plans: [],
-  existing_payment_plans: [],
-  
-  // Deleted file IDs (for edit mode)
-  deleted_gallery_ids: [],
-  deleted_floorplan_ids: [],
-  deleted_taxsheet_ids: [],
-  deleted_unitplan_ids: [],
-  deleted_paymentplan_ids: [],
-  
-  // SEO
-  seo_developer_name: '',
-  seo_city: '',
-  meta_title: '',
-  meta_keywords: '',
-  meta_description: '',
-  rich_snippets: '',
-};
-
-// Empty configuration template
+// Empty configuration template - with unit_plan_ids
 export const emptyConfiguration = {
   type: '',
   is_range: false,
+  units_available: '',
   area_min: '',
   area_max: '',
   area_unit: 'sqft',
   price_min: '',
   price_max: '',
   currency: 'AED',
-  units_available: '',
+  unit_plan_ids: [],        // Existing unit plan file IDs from DB
+  unit_plan_files: [],      // New files to upload (File objects)
+  deleted_unit_plan_ids: [], // IDs to delete on save
+  existing_unit_plans: [],  // Existing file objects for display
 };
 
 // Area unit options
@@ -129,6 +36,83 @@ export const CURRENCY_OPTIONS = [
   { value: 'GBP', label: 'GBP' },
 ];
 
+// Initial form state
+const initialFormData = {
+  // Step 1: Basic Details
+  developer_id: '',
+  project_name: '',
+  sub_headline: '',
+  project_logo: null,
+  project_logo_preview: '',
+  city: 'Dubai',
+  country: 'UAE',
+  locality: '',
+  project_address: '',
+  project_code: '',
+  usage_type: '',
+  project_type: '',
+  project_status: '',
+
+  // Step 2: Project Information + Contact (MOVED HERE)
+  total_towers: '',
+  total_units: '',
+  furnishing_status: '',
+  handover_date: '',
+  featured: false,
+  email_1: '',
+  email_2: '',
+  phone_1: '',
+  phone_1_ccode: '',
+  phone_2: '',
+  phone_2_ccode: '',
+
+  // Step 3: Pricing & Configuration (with unit plans per config)
+  configurations: [],
+  booking_amount: '',
+  payment_plan: '',
+  roi: '',
+
+  // Step 4: Content (with amenities)
+  about: '',
+  highlights: [],
+  faqs: [],
+  amenities: [],
+
+  // Step 5: Location (simplified - only map + nearby)
+  location_link: '',
+  nearby_locations: [],
+
+  // Step 6: Media & SEO (unit plans REMOVED - now in configurations)
+  video_url: '',
+  gallery_images: [],
+  floor_plans: [],
+  brochure: null,
+  brochure_name: '',
+  tax_sheets: [],
+  payment_plans: [],
+
+  // Existing files (for edit mode)
+  existing_gallery: [],
+  existing_floor_plans: [],
+  existing_brochure: null,
+  existing_tax_sheets: [],
+  existing_payment_plans: [],
+
+  // Deleted file IDs (for edit mode)
+  deleted_gallery_ids: [],
+  deleted_floorplan_ids: [],
+  deleted_taxsheet_ids: [],
+  deleted_paymentplan_ids: [],
+
+  // SEO
+  seo_developer_name: '',
+  seo_city: '',
+  meta_title: '',
+  meta_keywords: '',
+  meta_description: '',
+  rich_snippets: '',
+};
+
 export function ProjectFormProvider({ children, editMode = false, projectId = null, initialData = null }) {
   const [formData, setFormData] = useState(initialFormData);
   const [currentStep, setCurrentStep] = useState(1);
@@ -143,7 +127,6 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          // Don't restore file objects from localStorage
           setFormData({
             ...initialFormData,
             ...parsed,
@@ -152,8 +135,12 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
             floor_plans: [],
             brochure: null,
             tax_sheets: [],
-            unit_plans: [],
             payment_plans: [],
+            configurations: (parsed.configurations || []).map(config => ({
+              ...config,
+              unit_plan_files: [],
+              existing_unit_plans: [],
+            })),
           });
         } catch (e) {
           console.error('Failed to parse saved form data:', e);
@@ -165,20 +152,37 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
   // Load project data for edit mode
   useEffect(() => {
     if (editMode && initialData) {
+      // Get all unit plan files
+      const unitPlanFiles = initialData.files?.unitplan || [];
+
+      // Parse configurations and attach existing unit plans
+      const configurations = (initialData.configurations || []).map((config, index) => {
+        const configUnitPlans = unitPlanFiles.filter(f =>
+          (config.unit_plan_ids || []).includes(f.file_id)
+        );
+        return {
+          ...config,
+          unit_plan_ids: config.unit_plan_ids || [],
+          unit_plan_files: [],
+          deleted_unit_plan_ids: [],
+          existing_unit_plans: configUnitPlans,
+        };
+      });
+
       setFormData({
         ...initialFormData,
         ...initialData,
+        configurations,
         deleted_gallery_ids: [],
         deleted_floorplan_ids: [],
         deleted_taxsheet_ids: [],
-        deleted_unitplan_ids: [],
         deleted_paymentplan_ids: [],
       });
       setIsLoading(false);
     }
   }, [editMode, initialData]);
 
-  // Save to localStorage on formData change (only for add mode, exclude files)
+  // Save to localStorage on formData change (only for add mode)
   useEffect(() => {
     if (!editMode) {
       const dataToSave = {
@@ -190,31 +194,33 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
         brochure: null,
         brochure_name: '',
         tax_sheets: [],
-        unit_plans: [],
         payment_plans: [],
         existing_gallery: [],
         existing_floor_plans: [],
         existing_brochure: null,
         existing_tax_sheets: [],
-        existing_unit_plans: [],
         existing_payment_plans: [],
         deleted_gallery_ids: [],
         deleted_floorplan_ids: [],
         deleted_taxsheet_ids: [],
-        deleted_unitplan_ids: [],
         deleted_paymentplan_ids: [],
+        configurations: formData.configurations.map(config => ({
+          ...config,
+          unit_plan_files: [],
+          existing_unit_plans: [],
+          deleted_unit_plan_ids: [],
+        })),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     }
   }, [formData, editMode]);
 
   // Update form field
-  const updateField = (field, value) => {
+  const updateField = useCallback((field, value) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
-    // Clear error for this field
     if (errors[field]) {
       setErrors((prev) => {
         const newErrors = { ...prev };
@@ -222,64 +228,95 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
         return newErrors;
       });
     }
-  };
+  }, [errors]);
 
   // Update multiple fields
-  const updateFields = (fields) => {
+  const updateFields = useCallback((fields) => {
     setFormData((prev) => ({
       ...prev,
       ...fields,
     }));
-  };
+  }, []);
 
-  // Add deleted gallery file ID
-  const addDeletedGalleryId = (fileId) => {
+  // Add unit plan file to configuration
+  const addUnitPlanToConfig = useCallback((configIndex, file) => {
+    setFormData((prev) => {
+      const updated = [...prev.configurations];
+      const config = { ...updated[configIndex] };
+      config.unit_plan_files = [...(config.unit_plan_files || []), file];
+      updated[configIndex] = config;
+      return { ...prev, configurations: updated };
+    });
+  }, []);
+
+  // Remove new unit plan file from configuration (not yet saved)
+  const removeUnitPlanFileFromConfig = useCallback((configIndex, fileIndex) => {
+    setFormData((prev) => {
+      const updated = [...prev.configurations];
+      const config = { ...updated[configIndex] };
+      config.unit_plan_files = config.unit_plan_files.filter((_, i) => i !== fileIndex);
+      updated[configIndex] = config;
+      return { ...prev, configurations: updated };
+    });
+  }, []);
+
+  // Mark existing unit plan for deletion
+  const markUnitPlanForDeletion = useCallback((configIndex, fileId) => {
+    setFormData((prev) => {
+      const updated = [...prev.configurations];
+      const config = { ...updated[configIndex] };
+
+      // Remove from unit_plan_ids
+      config.unit_plan_ids = (config.unit_plan_ids || []).filter(id => id !== fileId);
+
+      // Remove from existing_unit_plans display
+      config.existing_unit_plans = (config.existing_unit_plans || []).filter(f => f.file_id !== fileId);
+
+      // Add to deleted list
+      config.deleted_unit_plan_ids = [...(config.deleted_unit_plan_ids || []), fileId];
+
+      updated[configIndex] = config;
+      return { ...prev, configurations: updated };
+    });
+  }, []);
+
+  // Add deleted IDs for other file types
+  const addDeletedGalleryId = useCallback((id) => {
     setFormData((prev) => ({
       ...prev,
-      deleted_gallery_ids: [...prev.deleted_gallery_ids, fileId],
+      deleted_gallery_ids: [...prev.deleted_gallery_ids, id],
     }));
-  };
+  }, []);
 
-  // Add deleted floorplan file ID
-  const addDeletedFloorplanId = (fileId) => {
+  const addDeletedFloorplanId = useCallback((id) => {
     setFormData((prev) => ({
       ...prev,
-      deleted_floorplan_ids: [...prev.deleted_floorplan_ids, fileId],
+      deleted_floorplan_ids: [...prev.deleted_floorplan_ids, id],
     }));
-  };
+  }, []);
 
-  // Add deleted taxsheet file ID
-  const addDeletedTaxsheetId = (fileId) => {
+  const addDeletedTaxsheetId = useCallback((id) => {
     setFormData((prev) => ({
       ...prev,
-      deleted_taxsheet_ids: [...prev.deleted_taxsheet_ids, fileId],
+      deleted_taxsheet_ids: [...prev.deleted_taxsheet_ids, id],
     }));
-  };
+  }, []);
 
-  // Add deleted unitplan file ID
-  const addDeletedUnitplanId = (fileId) => {
+  const addDeletedPaymentplanId = useCallback((id) => {
     setFormData((prev) => ({
       ...prev,
-      deleted_unitplan_ids: [...prev.deleted_unitplan_ids, fileId],
+      deleted_paymentplan_ids: [...prev.deleted_paymentplan_ids, id],
     }));
-  };
-
-  // Add deleted paymentplan file ID
-  const addDeletedPaymentplanId = (fileId) => {
-    setFormData((prev) => ({
-      ...prev,
-      deleted_paymentplan_ids: [...prev.deleted_paymentplan_ids, fileId],
-    }));
-  };
+  }, []);
 
   // Clear all form data
-  const clearForm = () => {
+  const clearForm = useCallback(() => {
     setFormData(initialFormData);
     localStorage.removeItem(STORAGE_KEY);
-  };
+  }, []);
 
   // Validate step
-  const validateStep = (step) => {
+  const validateStep = useCallback((step) => {
     const newErrors = {};
 
     switch (step) {
@@ -290,25 +327,7 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
         if (!formData.usage_type) newErrors.usage_type = 'Usage type is required';
         if (!formData.project_status) newErrors.project_status = 'Project status is required';
         break;
-
-      case 2:
-        // No required fields in step 2
-        break;
-
-      case 3:
-        // No required fields in step 3
-        break;
-
-      case 4:
-        // No required fields in step 4
-        break;
-
-      case 5:
-        // No required fields in step 5
-        break;
-
       case 6:
-        // SEO verification will happen on backend
         if (formData.seo_city && formData.seo_city !== formData.city) {
           newErrors.seo_city = 'City must match project city';
         }
@@ -317,108 +336,117 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
   // Navigate to next step
-  const nextStep = () => {
+  const nextStep = useCallback(() => {
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 6));
       return true;
     }
     return false;
-  };
+  }, [currentStep, validateStep]);
 
   // Navigate to previous step
-  const prevStep = () => {
+  const prevStep = useCallback(() => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
-  };
+  }, []);
 
   // Go to specific step
-  const goToStep = (step) => {
+  const goToStep = useCallback((step) => {
     if (step >= 1 && step <= 6) {
       setCurrentStep(step);
     }
-  };
+  }, []);
 
   // Get form data for API submission
-  const getSubmitData = () => {
+  const getSubmitData = useCallback(() => {
+    // Prepare configurations without File objects
+    const configurationsForSubmit = formData.configurations.map(config => ({
+      type: config.type,
+      is_range: config.is_range,
+      units_available: config.units_available,
+      area_min: config.area_min,
+      area_max: config.area_max,
+      area_unit: config.area_unit,
+      price_min: config.price_min,
+      price_max: config.price_max,
+      currency: config.currency,
+      unit_plan_ids: config.unit_plan_ids || [],
+      deleted_unit_plan_ids: config.deleted_unit_plan_ids || [],
+    }));
+
     return {
-      // Basic
       developer_id: formData.developer_id,
       project_name: formData.project_name,
       sub_headline: formData.sub_headline || null,
       city: formData.city,
       country: formData.country,
       locality: formData.locality || null,
-      project_address: formData.project_address || null, // NEW
+      project_address: formData.project_address || null,
       project_code: formData.project_code || null,
       usage_type: formData.usage_type,
       project_type: formData.project_type || null,
       project_status: formData.project_status,
-
-      // Info
       total_towers: formData.total_towers || null,
       total_units: formData.total_units || null,
       furnishing_status: formData.furnishing_status || null,
       handover_date: formData.handover_date || null,
-      // REMOVED: completion_date
       featured: formData.featured,
-      // REMOVED: youtube_link
-      location_link: formData.location_link || null,
-
-      // Pricing
-      configurations: formData.configurations,
-      booking_amount: formData.booking_amount || null,
-      payment_plan: formData.payment_plan || null,
-      roi: formData.roi || null,
-
-      // Content
-      about: formData.about || null,
-      highlights: formData.highlights,
-      faqs: formData.faqs,
-
-      // Location & Contact
-      amenities: formData.amenities,
-      nearby_locations: formData.nearby_locations,
       email_1: formData.email_1 || null,
       email_2: formData.email_2 || null,
       phone_1: formData.phone_1 || null,
       phone_1_ccode: formData.phone_1_ccode || null,
       phone_2: formData.phone_2 || null,
       phone_2_ccode: formData.phone_2_ccode || null,
-
-      // Media
-      video_url: formData.video_url || null, // NEW
-
-      // SEO
+      location_link: formData.location_link || null,
+      video_url: formData.video_url || null,
+      configurations: configurationsForSubmit,
+      booking_amount: formData.booking_amount || null,
+      payment_plan: formData.payment_plan || null,
+      roi: formData.roi || null,
+      about: formData.about || null,
+      highlights: formData.highlights,
+      faqs: formData.faqs,
+      amenities: formData.amenities,
+      nearby_locations: formData.nearby_locations,
       seo_developer_name: formData.seo_developer_name || null,
       seo_city: formData.seo_city || null,
       meta_title: formData.meta_title || null,
       meta_keywords: formData.meta_keywords || null,
       meta_description: formData.meta_description || null,
       rich_snippets: formData.rich_snippets || null,
-      
-      // Deleted file IDs (for edit mode)
       deleted_gallery_ids: formData.deleted_gallery_ids,
       deleted_floorplan_ids: formData.deleted_floorplan_ids,
       deleted_taxsheet_ids: formData.deleted_taxsheet_ids,
-      deleted_unitplan_ids: formData.deleted_unitplan_ids,
       deleted_paymentplan_ids: formData.deleted_paymentplan_ids,
     };
-  };
+  }, [formData]);
 
   // Get files for upload
-  const getFiles = () => {
+  const getFiles = useCallback(() => {
+    // Collect unit plan files from all configurations
+    const configUnitPlans = [];
+    formData.configurations.forEach((config, configIndex) => {
+      (config.unit_plan_files || []).forEach((file, fileIndex) => {
+        configUnitPlans.push({
+          configIndex,
+          fileIndex,
+          file,
+        });
+      });
+    });
+
     return {
       project_logo: formData.project_logo,
-      gallery_images: formData.gallery_images,
-      floor_plans: formData.floor_plans,
+      gallery_images: formData.gallery_images || [],
+      floor_plans: formData.floor_plans || [],
       brochure: formData.brochure,
-      tax_sheets: formData.tax_sheets,
-      unit_plans: formData.unit_plans,
-      payment_plans: formData.payment_plans,
+      tax_sheets: formData.tax_sheets || [],
+      payment_plans: formData.payment_plans || [],
+      config_unit_plans: configUnitPlans,
     };
-  };
+  }, [formData]);
 
   const value = {
     formData,
@@ -430,10 +458,12 @@ export function ProjectFormProvider({ children, editMode = false, projectId = nu
     projectId,
     updateField,
     updateFields,
+    addUnitPlanToConfig,
+    removeUnitPlanFileFromConfig,
+    markUnitPlanForDeletion,
     addDeletedGalleryId,
     addDeletedFloorplanId,
     addDeletedTaxsheetId,
-    addDeletedUnitplanId,
     addDeletedPaymentplanId,
     clearForm,
     validateStep,

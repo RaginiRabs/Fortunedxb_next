@@ -19,7 +19,9 @@
     "bcryptjs": "^3.0.3",
     "formik": "^2.4.9",
     "framer-motion": "^12.23.25",
+    "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.3",
+    "leaflet": "^1.9.4",
     "lodash-es": "^4.17.21",
     "lucide-react": "^0.555.0",
     "mui-tel-input": "^9.0.1",
@@ -27,6 +29,7 @@
     "next": "16.0.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-leaflet": "^5.0.0",
     "yup": "^1.7.1"
   },
   "devDependencies": {

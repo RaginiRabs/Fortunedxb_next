@@ -23,12 +23,27 @@ import {
   AddOutlined,
   DeleteOutlined,
 } from '@mui/icons-material';
-import { useProjectForm, emptyConfiguration, AREA_UNITS, CURRENCY_OPTIONS } from '@/contexts/ProjectFormContext';
+import {
+  useProjectForm,
+  emptyConfiguration,
+  AREA_UNITS,
+  CURRENCY_OPTIONS
+} from '@/contexts/ProjectFormContext';
 import { UNIT_TYPES } from '@/data/projectTypes';
+import MultiFileUpload from '@/components/admin/MultiFileUpload';
 
 export default function StepPricing() {
   const router = useRouter();
-  const { formData, updateField, nextStep, prevStep, editMode, projectId } = useProjectForm();
+  const {
+    formData,
+    updateField,
+    markUnitPlanForDeletion,
+    nextStep,
+    prevStep,
+    editMode,
+    projectId
+  } = useProjectForm();
+
   const [customUnitTypes, setCustomUnitTypes] = useState({});
 
   // Initialize custom unit types for existing configs
@@ -50,7 +65,6 @@ export default function StepPricing() {
   const handleRemoveConfiguration = (index) => {
     const updated = formData.configurations.filter((_, i) => i !== index);
     updateField('configurations', updated);
-    // Clean up custom unit type
     const newCustoms = { ...customUnitTypes };
     delete newCustoms[index];
     setCustomUnitTypes(newCustoms);
@@ -59,14 +73,12 @@ export default function StepPricing() {
   const handleConfigChange = (index, field, value) => {
     const updated = [...formData.configurations];
     updated[index] = { ...updated[index], [field]: value };
-    
-    // If is_range is turned off, copy min values to max
+
     if (field === 'is_range' && !value) {
       updated[index].area_max = updated[index].area_min;
       updated[index].price_max = updated[index].price_min;
     }
-    
-    // If is_range is false and min value changes, sync to max
+
     if (!updated[index].is_range) {
       if (field === 'area_min') {
         updated[index].area_max = value;
@@ -75,11 +87,10 @@ export default function StepPricing() {
         updated[index].price_max = value;
       }
     }
-    
+
     updateField('configurations', updated);
   };
 
-  // Get display value for unit type select
   const getUnitTypeSelectValue = (config, index) => {
     if (!config.type) return '';
     if (UNIT_TYPES.slice(0, -1).includes(config.type)) {
@@ -88,7 +99,6 @@ export default function StepPricing() {
     return 'Other';
   };
 
-  // Check if unit type is custom
   const isCustomUnitType = (config, index) => {
     return config.type === 'Other' || customUnitTypes[index] !== undefined ||
       (config.type && !UNIT_TYPES.slice(0, -1).includes(config.type));
@@ -111,6 +121,20 @@ export default function StepPricing() {
     if (value.trim()) {
       handleConfigChange(index, 'type', value.trim());
     }
+  };
+
+  // Unit Plan handlers for MultiFileUpload
+  const handleUnitPlanFilesChange = (configIndex, files) => {
+    const updated = [...formData.configurations];
+    updated[configIndex] = {
+      ...updated[configIndex],
+      unit_plan_files: files
+    };
+    updateField('configurations', updated);
+  };
+
+  const handleRemoveExistingUnitPlan = (configIndex, file) => {
+    markUnitPlanForDeletion(configIndex, file.file_id);
   };
 
   const handleNext = () => {
@@ -163,7 +187,6 @@ export default function StepPricing() {
               >
                 {/* Row 1: Unit Type + Range Toggle + Delete */}
                 <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                  {/* Unit Type Dropdown */}
                   <Grid size={{ xs: 12, md: isCustomUnitType(config, index) ? 3 : 4 }}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Unit Type</InputLabel>
@@ -182,7 +205,6 @@ export default function StepPricing() {
                     </FormControl>
                   </Grid>
 
-                  {/* Custom Unit Type Field */}
                   {isCustomUnitType(config, index) && (
                     <Grid size={{ xs: 12, md: 3 }}>
                       <TextField
@@ -196,7 +218,6 @@ export default function StepPricing() {
                     </Grid>
                   )}
 
-                  {/* Is Range Toggle */}
                   <Grid size={{ xs: 6, md: 3 }}>
                     <FormControlLabel
                       control={
@@ -214,7 +235,6 @@ export default function StepPricing() {
                     />
                   </Grid>
 
-                  {/* Units Available */}
                   <Grid size={{ xs: 4, md: 2 }}>
                     <TextField
                       size="small"
@@ -228,7 +248,6 @@ export default function StepPricing() {
                     />
                   </Grid>
 
-                  {/* Delete Button */}
                   <Grid size={{ xs: 2, md: 1 }}>
                     <IconButton
                       onClick={() => handleRemoveConfiguration(index)}
@@ -246,7 +265,7 @@ export default function StepPricing() {
                       Area
                     </Typography>
                   </Grid>
-                  
+
                   {config.is_range ? (
                     <>
                       <Grid size={{ xs: 5, md: 4 }}>
@@ -282,7 +301,7 @@ export default function StepPricing() {
                       />
                     </Grid>
                   )}
-                  
+
                   <Grid size={{ xs: 2, md: 2 }}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Unit</InputLabel>
@@ -302,13 +321,13 @@ export default function StepPricing() {
                 </Grid>
 
                 {/* Row 3: Price Fields */}
-                <Grid container spacing={2}>
+                <Grid container spacing={2} sx={{ mb: 2 }}>
                   <Grid size={{ xs: 12 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
                       Price
                     </Typography>
                   </Grid>
-                  
+
                   {config.is_range ? (
                     <>
                       <Grid size={{ xs: 5, md: 4 }}>
@@ -344,7 +363,7 @@ export default function StepPricing() {
                       />
                     </Grid>
                   )}
-                  
+
                   <Grid size={{ xs: 2, md: 2 }}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Currency</InputLabel>
@@ -362,6 +381,22 @@ export default function StepPricing() {
                     </FormControl>
                   </Grid>
                 </Grid>
+
+                {/* Row 4: Unit Plans Upload using MultiFileUpload */}
+                <Box sx={{ pt: 2, borderTop: '1px dashed', borderColor: 'grey.300' }}>
+                  <MultiFileUpload
+                    name={`unit_plans_config_${index}`}
+                    label={`Unit Plans ${config.type ? `for ${config.type}` : ''}`}
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    maxSize={5}
+                    maxFiles={10}
+                    helperText="Images or PDF • Max 5MB each"
+                    existingFiles={config.existing_unit_plans || []}
+                    value={config.unit_plan_files || []}
+                    onChange={(files) => handleUnitPlanFilesChange(index, files)}
+                    onRemoveExisting={(file) => handleRemoveExistingUnitPlan(index, file)}
+                  />
+                </Box>
               </Box>
             ))}
           </Box>
@@ -393,7 +428,6 @@ export default function StepPricing() {
         </Typography>
 
         <Grid container spacing={3}>
-          {/* Booking Amount */}
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               fullWidth
@@ -407,7 +441,6 @@ export default function StepPricing() {
             />
           </Grid>
 
-          {/* Payment Plan */}
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               fullWidth
@@ -418,7 +451,6 @@ export default function StepPricing() {
             />
           </Grid>
 
-          {/* Expected ROI with % prefix */}
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
               fullWidth

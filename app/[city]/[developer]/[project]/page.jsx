@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   Box,
   Container,
@@ -20,7 +21,6 @@ import {
   DialogContent,
   Skeleton,
   Collapse,
-  LinearProgress,
 } from '@mui/material';
 import {
   MapPin,
@@ -68,11 +68,9 @@ import {
   School,
   Hospital,
   Store,
-  Footprints,
 } from 'lucide-react';
 import { 
   getStatusStyle, 
-  createSlug, 
   extractIdFromSlug,
   formatPrice,
   getLowestPrice,
@@ -80,9 +78,32 @@ import {
   getAreaRange,
   formatConfigArea,
   formatConfigPrice,
-  configHasPrice,
 } from '@/lib/utils';
 import { useProject } from '@/hooks/project/useProjecHook';
+
+// Dynamic import for LocationMap (Google Maps iframe - NO SSR)
+const LocationMap = dynamic(
+  () => import('@/components/LocationMap/LocationMap'),
+  { 
+    ssr: false,
+    loading: () => (
+      <Box 
+        sx={{ 
+          height: '100%',
+          minHeight: { xs: 250, md: 400 },
+          bgcolor: '#E8EEF4',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        <Typography sx={{ color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
+          Loading map...
+        </Typography>
+      </Box>
+    )
+  }
+);
 
 // Amenity icons mapping
 const amenityIcons = {
@@ -192,15 +213,12 @@ const ProjectDetailsSkeleton = () => (
   </Box>
 );
 
-// ============ NEW COMPONENTS ============
-
-// Payment Plan - Option D (Stacked Horizontal Bar)
+// Payment Plan Bar Component
 const PaymentPlanBar = ({ paymentPlan, bookingAmount }) => {
   const parts = paymentPlan.split('/').map(p => parseInt(p) || 0);
   const labels = ['Booking', 'During Construction', 'On Handover', 'Post Handover'];
   const colors = ['#C6A962', '#1E3A5F', '#0F2237', '#0B1A2A'];
   
-  // Filter out zero percentages
   const validParts = parts.map((p, i) => ({ percentage: p, label: labels[i], color: colors[i] })).filter(p => p.percentage > 0);
 
   return (
@@ -209,67 +227,22 @@ const PaymentPlanBar = ({ paymentPlan, bookingAmount }) => {
         Payment Plan
       </Typography>
       
-      {/* Stacked Bar */}
-      <Box sx={{ 
-        display: 'flex', 
-        borderRadius: 2, 
-        overflow: 'hidden', 
-        height: { xs: 50, md: 60 },
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-      }}>
+      <Box sx={{ display: 'flex', borderRadius: 2, overflow: 'hidden', height: { xs: 50, md: 60 }, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
         {validParts.map((part, i) => (
-          <Box 
-            key={i}
-            sx={{ 
-              width: `${part.percentage}%`, 
-              bgcolor: part.color,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'column',
-              transition: 'all 0.3s ease',
-              cursor: 'pointer',
-              '&:hover': { 
-                filter: 'brightness(1.1)',
-                transform: 'scaleY(1.05)'
-              }
-            }}
-          >
-            <Typography sx={{ 
-              color: i === 0 ? '#0B1A2A' : '#FFFFFF', 
-              fontWeight: 700, 
-              fontSize: { xs: '1rem', md: '1.25rem' },
-              fontFamily: '"Quicksand", sans-serif', 
-              fontStyle: 'italic',
-              lineHeight: 1
-            }}>
-              {part.percentage}%
-            </Typography>
+          <Box key={i} sx={{ width: `${part.percentage}%`, bgcolor: part.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', transition: 'all 0.3s ease', cursor: 'pointer', '&:hover': { filter: 'brightness(1.1)', transform: 'scaleY(1.05)' } }}>
+            <Typography sx={{ color: i === 0 ? '#0B1A2A' : '#FFFFFF', fontWeight: 700, fontSize: { xs: '1rem', md: '1.25rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', lineHeight: 1 }}>{part.percentage}%</Typography>
           </Box>
         ))}
       </Box>
 
-      {/* Labels below */}
       <Box sx={{ display: 'flex', mt: 1.5 }}>
         {validParts.map((part, i) => (
           <Box key={i} sx={{ width: `${part.percentage}%`, textAlign: 'center', px: 0.5 }}>
-            <Typography sx={{ 
-              fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.8rem' }, 
-              color: '#64748B', 
-              fontWeight: 500,
-              fontFamily: '"Quicksand", sans-serif', 
-              fontStyle: 'italic',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {part.label}
-            </Typography>
+            <Typography sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.8rem' }, color: '#64748B', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{part.label}</Typography>
           </Box>
         ))}
       </Box>
 
-      {/* Booking Amount */}
       {bookingAmount && (
         <Box sx={{ mt: 2, p: 2, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px dashed #C6A962' }}>
           <Typography sx={{ fontSize: '0.85rem', color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', textAlign: 'center' }}>
@@ -281,7 +254,7 @@ const PaymentPlanBar = ({ paymentPlan, bookingAmount }) => {
   );
 };
 
-// Amenities - Option B (Scrollable Pills + Expandable Grid)
+// Amenities Section Component
 const AmenitiesSection = ({ amenities }) => {
   const [showAll, setShowAll] = useState(false);
   const theme = useTheme();
@@ -292,92 +265,32 @@ const AmenitiesSection = ({ amenities }) => {
 
   return (
     <Box sx={{ mb: 5 }}>
-      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
-        Amenities
-      </Typography>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Amenities</Typography>
 
-      {/* Scrollable Pills */}
-      <Box sx={{ 
-        display: 'flex', 
-        gap: 1, 
-        overflowX: 'auto', 
-        pb: 2,
-        mb: 2,
-        '&::-webkit-scrollbar': { height: 4 },
-        '&::-webkit-scrollbar-track': { bgcolor: '#F1F5F9', borderRadius: 2 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: '#C6A962', borderRadius: 2 },
-      }}>
+      <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 2, mb: 2, '&::-webkit-scrollbar': { height: 4 }, '&::-webkit-scrollbar-track': { bgcolor: '#F1F5F9', borderRadius: 2 }, '&::-webkit-scrollbar-thumb': { bgcolor: '#C6A962', borderRadius: 2 } }}>
         {amenities.slice(0, showAll ? amenities.length : visibleCount).map((amenity, i) => {
           const IconComponent = amenityIcons[amenity] || amenityIcons['Default'];
           return (
-            <Chip
-              key={i}
-              icon={<IconComponent size={16} color="#C6A962" />}
-              label={amenity}
-              sx={{
-                bgcolor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: 3,
-                px: 1,
-                py: 2.5,
-                fontSize: { xs: '0.75rem', md: '0.85rem' },
-                fontWeight: 500,
-                fontFamily: '"Quicksand", sans-serif',
-                fontStyle: 'italic',
-                color: '#334155',
-                flexShrink: 0,
-                transition: 'all 0.2s',
-                '&:hover': { 
-                  borderColor: '#C6A962', 
-                  bgcolor: '#FFFDF8',
-                  transform: 'translateY(-2px)'
-                },
-                '& .MuiChip-icon': { ml: 1 }
-              }}
-            />
+            <Chip key={i} icon={<IconComponent size={16} color="#C6A962" />} label={amenity} sx={{ bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 3, px: 1, py: 2.5, fontSize: { xs: '0.75rem', md: '0.85rem' }, fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', color: '#334155', flexShrink: 0, transition: 'all 0.2s', '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8', transform: 'translateY(-2px)' }, '& .MuiChip-icon': { ml: 1 } }} />
           );
         })}
       </Box>
 
-      {/* Show More/Less Button */}
       {hasMore && (
-        <Button 
-          onClick={() => setShowAll(!showAll)}
-          endIcon={showAll ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          sx={{ 
-            color: '#C6A962', 
-            fontWeight: 600, 
-            fontFamily: '"Quicksand", sans-serif', 
-            fontStyle: 'italic',
-            '&:hover': { bgcolor: 'rgba(198, 169, 98, 0.1)' }
-          }}
-        >
+        <Button onClick={() => setShowAll(!showAll)} endIcon={showAll ? <ChevronUp size={16} /> : <ChevronDown size={16} />} sx={{ color: '#C6A962', fontWeight: 600, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(198, 169, 98, 0.1)' } }}>
           {showAll ? 'Show Less' : `+${amenities.length - visibleCount} More Amenities`}
         </Button>
       )}
 
-      {/* Expanded Grid */}
       <Collapse in={showAll}>
         <Grid container spacing={1.5} sx={{ mt: 1 }}>
           {amenities.slice(visibleCount).map((amenity, i) => {
             const IconComponent = amenityIcons[amenity] || amenityIcons['Default'];
             return (
               <Grid size={{ xs: 6, sm: 4, md: 3 }} key={i}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 1.5, 
-                  p: 2, 
-                  borderRadius: 2, 
-                  bgcolor: '#F8FAFC', 
-                  border: '1px solid #E2E8F0',
-                  transition: 'all 0.2s',
-                  '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8' }
-                }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', transition: 'all 0.2s', '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8' } }}>
                   <IconComponent size={18} color="#C6A962" />
-                  <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
-                    {amenity}
-                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{amenity}</Typography>
                 </Box>
               </Grid>
             );
@@ -388,12 +301,8 @@ const AmenitiesSection = ({ amenities }) => {
   );
 };
 
-// Location - Split Layout (List Left, Map Right)
-const LocationSection = ({ nearbyLocations, locationLink, location }) => {
-  const [hoveredIndex, setHoveredIndex] = useState(null);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
+// ============ SIMPLIFIED LOCATION SECTION (Google Maps Iframe) ============
+const LocationSection = ({ nearbyLocations, locationLink, location, projectName }) => {
   return (
     <Box sx={{ mb: 5 }}>
       <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
@@ -409,13 +318,10 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
                 <Box sx={{ maxHeight: { xs: 'auto', md: 400 }, overflowY: 'auto' }}>
                   {nearbyLocations.map((place, i) => {
                     const IconComponent = getLocationIcon(place.place_name);
-                    const isHovered = hoveredIndex === i;
 
                     return (
                       <Box
                         key={i}
-                        onMouseEnter={() => setHoveredIndex(i)}
-                        onMouseLeave={() => setHoveredIndex(null)}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -423,9 +329,8 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
                           px: { xs: 2, md: 2.5 },
                           py: { xs: 2, md: 2.5 },
                           borderBottom: '1px solid #F1F5F9',
-                          bgcolor: isHovered ? '#FFFDF8' : 'transparent',
                           transition: 'all 0.2s ease',
-                          cursor: 'pointer'
+                          '&:hover': { bgcolor: '#FFFDF8' }
                         }}
                       >
                         {/* Left: Number + Icon + Name */}
@@ -436,16 +341,15 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
                             width: { xs: 28, md: 32 },
                             height: { xs: 28, md: 32 },
                             borderRadius: '50%',
-                            bgcolor: isHovered ? '#C6A962' : '#0B1A2A',
-                            color: isHovered ? '#0B1A2A' : '#FFFFFF',
+                            bgcolor: '#0B1A2A',
+                            color: '#FFFFFF',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 700,
                             fontSize: { xs: '0.8rem', md: '0.9rem' },
                             fontFamily: '"Quicksand", sans-serif',
-                            transition: 'all 0.2s ease',
-                            flexShrink: 0
+                            flexShrink: 0,
                           }}>
                             {i + 1}
                           </Box>
@@ -562,7 +466,7 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
             </Box>
           </Grid>
 
-          {/* Right Side - Map */}
+          {/* Right Side - Google Maps Iframe */}
           <Grid size={{ xs: 12, md: 7 }} sx={{ order: { xs: 1, md: 2 } }}>
             <Box 
               sx={{ 
@@ -572,15 +476,11 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
                 bgcolor: '#E8EEF4'
               }}
             >
-              {/* Google Maps Embed */}
-              <iframe
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(location)}&t=&z=14&ie=UTF8&iwloc=&output=embed`}
-                width="100%"
+              {/* LocationMap Component - Simple Google Maps iframe */}
+              <LocationMap
+                locationLink={locationLink}
+                projectName={projectName}
                 height="100%"
-                style={{ border: 0 }}
-                allowFullScreen=""
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
               />
 
               {/* View on Maps Overlay Button */}
@@ -603,6 +503,7 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
                   fontFamily: '"Quicksand", sans-serif',
                   fontStyle: 'italic',
                   boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+                  zIndex: 1000,
                   '&:hover': { bgcolor: '#FFFFFF' }
                 }}
               >
@@ -635,84 +536,31 @@ const LocationSection = ({ nearbyLocations, locationLink, location }) => {
           </Button>
         </Box>
       </Paper>
-
-      {/* Pulse Animation */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(198, 169, 98, 0.5); }
-          70% { box-shadow: 0 0 0 15px rgba(198, 169, 98, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(198, 169, 98, 0); }
-        }
-      `}</style>
     </Box>
   );
 };
 
-// FAQs - Option A (Accordion)
+// FAQs Section Component
 const FAQSection = ({ faqs }) => {
   const [expanded, setExpanded] = useState(0);
 
   return (
     <Box sx={{ mb: 5 }}>
-      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
-        Frequently Asked Questions
-      </Typography>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Frequently Asked Questions</Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {faqs.map((faq, i) => (
-          <Paper 
-            key={i} 
-            elevation={0} 
-            sx={{ 
-              borderRadius: 2, 
-              border: '1px solid',
-              borderColor: expanded === i ? '#C6A962' : '#E2E8F0',
-              overflow: 'hidden',
-              transition: 'all 0.2s'
-            }}
-          >
-            {/* Question Header */}
-            <Box 
-              onClick={() => setExpanded(expanded === i ? -1 : i)}
-              sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                p: { xs: 2, md: 2.5 },
-                cursor: 'pointer',
-                bgcolor: expanded === i ? '#FFFDF8' : '#FFFFFF',
-                transition: 'all 0.2s',
-                '&:hover': { bgcolor: '#FAFAFA' }
-              }}
-            >
-              <Typography sx={{ 
-                fontWeight: 600, 
-                color: '#0B1A2A', 
-                fontSize: { xs: '0.9rem', md: '1rem' },
-                fontFamily: '"Quicksand", sans-serif', 
-                fontStyle: 'italic',
-                pr: 2
-              }}>
-                {faq.question}
-              </Typography>
+          <Paper key={i} elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: expanded === i ? '#C6A962' : '#E2E8F0', overflow: 'hidden', transition: 'all 0.2s' }}>
+            <Box onClick={() => setExpanded(expanded === i ? -1 : i)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: { xs: 2, md: 2.5 }, cursor: 'pointer', bgcolor: expanded === i ? '#FFFDF8' : '#FFFFFF', transition: 'all 0.2s', '&:hover': { bgcolor: '#FAFAFA' } }}>
+              <Typography sx={{ fontWeight: 600, color: '#0B1A2A', fontSize: { xs: '0.9rem', md: '1rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', pr: 2 }}>{faq.question}</Typography>
               <IconButton size="small" sx={{ flexShrink: 0 }}>
                 {expanded === i ? <ChevronUp size={20} color="#C6A962" /> : <ChevronDown size={20} color="#64748B" />}
               </IconButton>
             </Box>
-
-            {/* Answer */}
             <Collapse in={expanded === i}>
               <Box sx={{ px: { xs: 2, md: 2.5 }, pb: { xs: 2, md: 2.5 }, pt: 0 }}>
                 <Divider sx={{ mb: 2 }} />
-                <Typography sx={{ 
-                  color: '#64748B', 
-                  fontSize: { xs: '0.85rem', md: '0.9rem' }, 
-                  lineHeight: 1.7,
-                  fontFamily: '"Quicksand", sans-serif', 
-                  fontStyle: 'italic'
-                }}>
-                  {faq.answer}
-                </Typography>
+                <Typography sx={{ color: '#64748B', fontSize: { xs: '0.85rem', md: '0.9rem' }, lineHeight: 1.7, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{faq.answer}</Typography>
               </Box>
             </Collapse>
           </Paper>
@@ -930,7 +778,7 @@ const ProjectDetails = () => {
                   <Typography sx={{ color: '#CBD5E1', fontSize: { xs: '0.85rem', md: '0.95rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{location}</Typography>
                 </Box>
                 
-                {/* Stats - Responsive */}
+                {/* Stats */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 2, md: 3 } }}>
                   {[
                     { icon: Bed, label: 'Bedrooms', value: bedsRange },
@@ -1013,16 +861,21 @@ const ProjectDetails = () => {
               </Box>
             )}
 
-            {/* Payment Plan - NEW Option D */}
+            {/* Payment Plan */}
             {paymentPlan && <PaymentPlanBar paymentPlan={paymentPlan} bookingAmount={bookingAmount} />}
 
-            {/* Amenities - NEW Option B */}
+            {/* Amenities */}
             {amenities.length > 0 && <AmenitiesSection amenities={amenities} />}
 
-            {/* Location - NEW Option I */}
-            <LocationSection nearbyLocations={nearbyLocations} locationLink={locationLink} location={location} />
+            {/* Location - Simplified Google Maps iframe */}
+            <LocationSection 
+              nearbyLocations={nearbyLocations} 
+              locationLink={locationLink} 
+              location={location} 
+              projectName={projectName}
+            />
 
-            {/* FAQs - NEW Option A */}
+            {/* FAQs */}
             {faqs.length > 0 && <FAQSection faqs={faqs} />}
 
             {/* Developer */}
@@ -1050,7 +903,7 @@ const ProjectDetails = () => {
             </Box>
           </Grid>
 
-          {/* Sidebar - Desktop Only, Sticky */}
+          {/* Sidebar - Desktop Only */}
           <Grid size={{ xs: 12, md: 4 }} sx={{ display: { xs: 'none', md: 'block' } }}>
             <Paper elevation={0} sx={{ p: 3, borderRadius: 2, bgcolor: '#0B1A2A', position: 'sticky', top: 100 }}>
               <Typography sx={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFFFFF', mb: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Interested?</Typography>

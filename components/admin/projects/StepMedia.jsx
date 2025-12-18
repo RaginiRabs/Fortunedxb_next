@@ -15,6 +15,7 @@ import {
   ArrowBackOutlined,
   SaveOutlined,
   VideoLibraryOutlined,
+  InfoOutlined,
 } from '@mui/icons-material';
 import { useProjectForm } from '@/contexts/ProjectFormContext';
 import FileUpload from '@/components/admin/FileUpload';
@@ -32,7 +33,6 @@ export default function StepMedia() {
     addDeletedGalleryId,
     addDeletedFloorplanId,
     addDeletedTaxsheetId,
-    addDeletedUnitplanId,
     addDeletedPaymentplanId,
     prevStep,
     editMode,
@@ -48,13 +48,12 @@ export default function StepMedia() {
 
   const [developers, setDevelopers] = useState([]);
   const [submitError, setSubmitError] = useState('');
-  
+
   // Existing files state
   const [existingGallery, setExistingGallery] = useState([]);
   const [existingFloorPlans, setExistingFloorPlans] = useState([]);
   const [existingBrochure, setExistingBrochure] = useState(null);
   const [existingTaxSheets, setExistingTaxSheets] = useState([]);
-  const [existingUnitPlans, setExistingUnitPlans] = useState([]);
   const [existingPaymentPlans, setExistingPaymentPlans] = useState([]);
 
   useEffect(() => {
@@ -65,10 +64,9 @@ export default function StepMedia() {
       if (formData.existing_floor_plans) setExistingFloorPlans(formData.existing_floor_plans);
       if (formData.existing_brochure) setExistingBrochure(formData.existing_brochure);
       if (formData.existing_tax_sheets) setExistingTaxSheets(formData.existing_tax_sheets);
-      if (formData.existing_unit_plans) setExistingUnitPlans(formData.existing_unit_plans);
       if (formData.existing_payment_plans) setExistingPaymentPlans(formData.existing_payment_plans);
     }
-  }, [editMode, formData.existing_gallery, formData.existing_floor_plans, formData.existing_brochure, formData.existing_tax_sheets, formData.existing_unit_plans, formData.existing_payment_plans]);
+  }, [editMode, formData.existing_gallery, formData.existing_floor_plans, formData.existing_brochure, formData.existing_tax_sheets, formData.existing_payment_plans]);
 
   const fetchDevelopers = async () => {
     try {
@@ -100,11 +98,6 @@ export default function StepMedia() {
   const handleRemoveExistingTaxSheet = (file) => {
     if (file.file_id) addDeletedTaxsheetId(file.file_id);
     setExistingTaxSheets((prev) => prev.filter((f) => f.file_id !== file.file_id));
-  };
-
-  const handleRemoveExistingUnitPlan = (file) => {
-    if (file.file_id) addDeletedUnitplanId(file.file_id);
-    setExistingUnitPlans((prev) => prev.filter((f) => f.file_id !== file.file_id));
   };
 
   const handleRemoveExistingPaymentPlan = (file) => {
@@ -173,17 +166,20 @@ export default function StepMedia() {
       });
       submitFormData.append('taxsheet_count', files.tax_sheets.length);
 
-      // Unit Plans
-      files.unit_plans.forEach((file, index) => {
-        submitFormData.append(`unitplan_${index}`, file);
-      });
-      submitFormData.append('unitplan_count', files.unit_plans.length);
-
       // Payment Plans
       files.payment_plans.forEach((file, index) => {
         submitFormData.append(`paymentplan_${index}`, file);
       });
       submitFormData.append('paymentplan_count', files.payment_plans.length);
+
+      // Config-wise Unit Plans
+      const configUnitPlanMeta = [];
+      files.config_unit_plans.forEach(({ configIndex, fileIndex, file }) => {
+        submitFormData.append(`config_unitplan_${configIndex}_${fileIndex}`, file);
+        configUnitPlanMeta.push({ configIndex, fileIndex });
+      });
+      submitFormData.append('config_unitplan_meta', JSON.stringify(configUnitPlanMeta));
+      submitFormData.append('config_unitplan_count', files.config_unit_plans.length);
 
       const url = editMode ? `/api/projects/${projectId}` : '/api/projects';
       const method = editMode ? 'put' : 'post';
@@ -323,9 +319,9 @@ export default function StepMedia() {
         </Grid>
       </Grid>
 
-      {/* New File Types: Tax Sheet, Unit Plan, Payment Plan */}
+      {/* Tax Sheet & Payment Plan */}
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card
             elevation={0}
             sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}
@@ -349,37 +345,13 @@ export default function StepMedia() {
           </Card>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card
             elevation={0}
             sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}
           >
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-              Unit Plan
-            </Typography>
-
-            <MultiFileUpload
-              name="unit_plans"
-              label="Unit Plan Documents"
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              maxSize={5}
-              maxFiles={10}
-              helperText="Images or PDF"
-              existingFiles={existingUnitPlans}
-              value={formData.unit_plans}
-              onChange={(files) => updateField('unit_plans', files)}
-              onRemoveExisting={handleRemoveExistingUnitPlan}
-            />
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card
-            elevation={0}
-            sx={{ p: 3, mb: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}
-          >
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-              Payment Plan
+              Payment Plan Documents
             </Typography>
 
             <MultiFileUpload

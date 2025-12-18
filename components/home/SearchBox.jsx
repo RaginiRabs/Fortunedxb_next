@@ -1,4 +1,6 @@
 'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Paper,
@@ -30,6 +32,27 @@ const SearchBox = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const router = useRouter();
+
+  // Handle search submit
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    
+    if (searchQuery) params.set('search', searchQuery);
+    if (selectedArea) params.set('area', selectedArea);
+    if (propertyType) params.set('type', propertyType);
+    if (bedrooms) params.set('beds', bedrooms);
+    
+    const queryString = params.toString();
+    router.push(`/projects${queryString ? `?${queryString}` : ''}`);
+  };
+
+  // Handle Enter key press
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
 
   return (
     <Paper
@@ -57,6 +80,7 @@ const SearchBox = ({
           placeholder={isMobile ? "Search projects..." : "Search by project, developer, or area..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={handleKeyPress}
           variant="standard"
           InputProps={{
             disableUnderline: true,
@@ -77,6 +101,7 @@ const SearchBox = ({
         {/* Mobile: Icon Button | Desktop: Full Button */}
         {isMobile ? (
           <IconButton
+            onClick={handleSearch}
             sx={{
               background: 'linear-gradient(135deg, #C6A962 0%, #A68B4B 100%)',
               borderRadius: 1,
@@ -94,6 +119,7 @@ const SearchBox = ({
           <Button
             variant="contained"
             size="large"
+            onClick={handleSearch}
             sx={{
               background: 'linear-gradient(135deg, #C6A962 0%, #A68B4B 100%)',
               color: '#FFFFFF',
@@ -177,10 +203,10 @@ const SearchBox = ({
             }}
           >
             <MenuItem value="">All Types</MenuItem>
-            <MenuItem value="apartment">Apartment</MenuItem>
-            <MenuItem value="villa">Villa</MenuItem>
-            <MenuItem value="townhouse">Townhouse</MenuItem>
-            <MenuItem value="penthouse">Penthouse</MenuItem>
+            <MenuItem value="Apartment">Apartment</MenuItem>
+            <MenuItem value="Villa">Villa</MenuItem>
+            <MenuItem value="Townhouse">Townhouse</MenuItem>
+            <MenuItem value="Penthouse">Penthouse</MenuItem>
           </Select>
         </FormControl>
 
@@ -204,11 +230,11 @@ const SearchBox = ({
             }}
           >
             <MenuItem value="">Any</MenuItem>
-            <MenuItem value="studio">Studio</MenuItem>
+            <MenuItem value="0">Studio</MenuItem>
             <MenuItem value="1">1 BR</MenuItem>
             <MenuItem value="2">2 BR</MenuItem>
             <MenuItem value="3">3 BR</MenuItem>
-            <MenuItem value="4+">4+ BR</MenuItem>
+            <MenuItem value="4">4+ BR</MenuItem>
           </Select>
         </FormControl>
 

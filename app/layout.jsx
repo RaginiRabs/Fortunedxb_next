@@ -1,6 +1,7 @@
 import './globals.css';
 import ThemeProvider from '@/providers/ThemeProvider';
 import LayoutWrapper from '@/components/layout/LayoutWrapper';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata = {
   title: 'Fortune DXB - Luxury Off-Plan Properties in Dubai',
