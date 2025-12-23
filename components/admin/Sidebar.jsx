@@ -21,6 +21,7 @@ import {
   ContactPhoneOutlined,
   PeopleOutlined,
   LogoutOutlined,
+  FormatQuoteOutlined,
 } from '@mui/icons-material';
 
 const menuItems = [
@@ -44,6 +45,11 @@ const menuItems = [
     title: 'Offers',
     path: '/admin/offers',
     icon: LocalOfferOutlined,
+  },
+  {
+    title: 'Testimonials',
+    path: '/admin/testimonials',
+    icon: FormatQuoteOutlined,
   },
   { divider: true },
   {

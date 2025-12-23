@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
-import { saveSingleFile, validateFile, deleteFile } from '@/lib/fileUpload';
+import { saveSingleFile, validateFile, deleteSingleFile } from '@/lib/fileUpload';
 
 // GET - Get single testimonial
 export async function GET(request, { params }) {
@@ -122,7 +122,7 @@ export async function PUT(request, { params }) {
         // Delete old image if exists
         if (existing.client_image) {
           try {
-            await deleteFile(existing.client_image);
+            deleteSingleFile(existing.client_image);
           } catch (err) {
             console.error('Error deleting old image:', err);
           }
@@ -164,7 +164,7 @@ export async function DELETE(request, { params }) {
     // Delete image if exists
     if (existing.client_image) {
       try {
-        await deleteFile(existing.client_image);
+        deleteSingleFile(existing.client_image);
       } catch (err) {
         console.error('Error deleting image:', err);
       }
