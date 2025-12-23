@@ -134,7 +134,8 @@ export default function Home() {
       <TestimonialsSection />
 
       {/* Top Developers */}
-      <TopDevelopers developers={developers} />
+      {/* <TopDevelopers developers={developers} /> */}
+      <TopDevelopers />
 
       {/* Newsletter */}
       <NewsletterSection />
