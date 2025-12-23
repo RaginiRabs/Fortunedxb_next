@@ -1,885 +1,877 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   Box,
   Container,
   Typography,
+  Grid,
   Button,
   Chip,
-  Grid,
-  TextField,
-  InputAdornment,
-  Select,
-  MenuItem,
-  FormControl,
-  Slider,
-  Drawer,
   IconButton,
+  Avatar,
+  Paper,
   Divider,
-  Pagination,
+  TextField,
   useMediaQuery,
   useTheme,
-  Breadcrumbs,
-  Link as MuiLink,
+  Dialog,
+  DialogContent,
+  Skeleton,
+  Collapse,
 } from '@mui/material';
 import {
-  Search,
-  SlidersHorizontal,
-  Grid3X3,
-  List,
-  X,
-  ChevronRight,
   MapPin,
+  Bed,
+  Maximize2,
+  Calendar,
   Building2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Heart,
+  Share2,
+  Download,
+  Phone,
+  MessageCircle,
+  CheckCircle2,
+  ArrowRight,
+  Play,
+  X,
   Home,
-  ArrowUpDown,
-  RotateCcw,
+  Navigation,
+  TrendingUp,
+  Shield,
+  Award,
+  BadgeCheck,
+  Car,
+  Dumbbell,
+  Waves,
+  TreePine,
+  ShoppingBag,
+  GraduationCap,
+  Stethoscope,
+  Utensils,
+  Wifi,
+  Lock,
+  Sun,
+  Wind,
+  Image,
+  ArrowUpRight,
+  Sparkles,
+  Train,
+  Plane,
+  UtensilsCrossed,
+  School,
+  Hospital,
+  Store,
 } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import ProjectCard, { ProjectCardSkeleton } from '@/components/home/ProjectCard';
-import { useProjects } from '@/hooks/project/useProjecHook';
+import { 
+  getStatusStyle, 
+  extractIdFromSlug,
+  formatPrice,
+  getLowestPrice,
+  getUnitTypes,
+  getAreaRange,
+  formatConfigArea,
+  formatConfigPrice,
+} from '@/lib/utils';
+import { useProject } from '@/hooks/project/useProjecHook';
 
-// Filter Options
-const statusOptions = [
-  { label: 'All Status', value: '' },
-  { label: 'Off-Plan', value: 'Off-Plan' },
-  { label: 'Under Construction', value: 'Under Construction' },
-  { label: 'Ready to Move', value: 'Ready to Move' },
-];
+// ============ LEAD CAPTURE IMPORTS ============
+import { LeadCaptureProvider, useLeadCapture } from '@/context/LeadCaptureContext';
+import LeadCapturePopup from '@/components/admin/LeadCapturePopup';
 
-const propertyTypeOptions = [
-  { label: 'All Types', value: '' },
-  { label: 'Apartment', value: 'Apartment' },
-  { label: 'Villa', value: 'Villa' },
-  { label: 'Townhouse', value: 'Townhouse' },
-  { label: 'Penthouse', value: 'Penthouse' },
-  { label: 'Studio', value: 'Studio' },
-];
+// Dynamic import for LocationMap (Google Maps iframe - NO SSR)
+const LocationMap = dynamic(
+  () => import('@/components/LocationMap/LocationMap'),
+  { 
+    ssr: false,
+    loading: () => (
+      <Box 
+        sx={{ 
+          height: '100%',
+          minHeight: { xs: 250, md: 400 },
+          bgcolor: '#E8EEF4',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        <Typography sx={{ color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
+          Loading map...
+        </Typography>
+      </Box>
+    )
+  }
+);
 
-const bedroomOptions = [
-  { label: 'Any Beds', value: '' },
-  { label: 'Studio', value: '0' },
-  { label: '1 Bedroom', value: '1' },
-  { label: '2 Bedrooms', value: '2' },
-  { label: '3 Bedrooms', value: '3' },
-  { label: '4+ Bedrooms', value: '4' },
-];
+// Amenity icons mapping
+const amenityIcons = {
+  'Pool': Waves, 'Swimming Pool': Waves, 'Infinity Pool': Waves, 'Kids Pool': Waves,
+  'Gym': Dumbbell, 'Yoga Studio': Dumbbell, 'Parking': Car, 'Covered Parking': Car,
+  'Garden': TreePine, 'Private Garden': TreePine, 'Landscaped Gardens': TreePine,
+  'Security': Lock, 'CCTV Surveillance': Lock, 'Retail': ShoppingBag, 'Supermarket': ShoppingBag,
+  'Schools': GraduationCap, 'Hospital': Stethoscope, 'Restaurants': Utensils,
+  'WiFi': Wifi, 'Balcony': Sun, 'AC': Wind, 'Spa': Sparkles, 'Jacuzzi': Waves,
+  'Concierge': BadgeCheck, 'Kids Area': TreePine, 'Beach Access': Waves,
+  'Private Beach': Waves, 'Valet': Car, 'Marina View': Waves, 'Creek View': Waves,
+  'Burj View': Building2, 'Golf View': TreePine, 'Park Access': TreePine,
+  'Park': TreePine, 'Maid Room': Home, 'Driver Room': Car,
+  'Reception & Lobby': Building2, 'Business Center': Building2,
+  'Meeting Rooms': Building2, 'EV Charging': Car, 'Default': CheckCircle2,
+};
 
-const sortOptions = [
-  { label: 'Newest First', value: 'newest' },
-  { label: 'Price: Low to High', value: 'price_asc' },
-  { label: 'Price: High to Low', value: 'price_desc' },
-  { label: 'Name: A-Z', value: 'name_asc' },
-];
+// Location icons mapping
+const locationIcons = {
+  'metro': Train, 'train': Train, 'station': Train,
+  'airport': Plane, 'mall': Store, 'shopping': Store,
+  'school': School, 'university': School, 'college': School,
+  'hospital': Hospital, 'clinic': Hospital, 'medical': Hospital,
+  'restaurant': UtensilsCrossed, 'cafe': UtensilsCrossed,
+  'beach': Waves, 'park': TreePine, 'garden': TreePine,
+  'default': MapPin,
+};
 
-const ITEMS_PER_PAGE = 12;
+// Get icon for location
+const getLocationIcon = (placeName) => {
+  const name = placeName.toLowerCase();
+  for (const [key, icon] of Object.entries(locationIcons)) {
+    if (name.includes(key)) return icon;
+  }
+  return locationIcons.default;
+};
 
-export default function ProjectsPage() {
+// ============ MOBILE CTA COMPONENT (MODIFIED) ============
+const MobileStickyCTA = ({ phone }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { handleGetPrice, isLeadSubmitted } = useLeadCapture();
+
+  if (!isMobile) return null;
+
+  const handleGetPriceClick = () => {
+    const alreadySubmitted = handleGetPrice();
+    // If already submitted, you could show a toast or do nothing
+  };
+
+  return (
+    <Paper elevation={8} sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000, p: 2, borderRadius: '16px 16px 0 0', bgcolor: '#0B1A2A' }}>
+      <Box sx={{ display: 'flex', gap: 1.5 }}>
+        <Button 
+          fullWidth 
+          variant="outlined" 
+          startIcon={<Phone size={18} />} 
+          href={`tel:${phone || '+971588529900'}`} 
+          sx={{ borderColor: '#FFFFFF', color: '#FFFFFF', py: 1.25, fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}
+        >
+          Call Now
+        </Button>
+        <Button 
+          fullWidth 
+          variant="contained" 
+          onClick={handleGetPriceClick} 
+          sx={{ bgcolor: '#C6A962', color: '#0B1A2A', py: 1.25, fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}
+        >
+          {isLeadSubmitted() ? 'Price Sent ✓' : 'Get Price'}
+        </Button>
+      </Box>
+    </Paper>
+  );
+};
+
+// Loading Skeleton
+const ProjectDetailsSkeleton = () => (
+  <Box sx={{ bgcolor: '#0B1A2A', minHeight: '100vh', pt: 12, pb: 4 }}>
+    <Container maxWidth="lg">
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Skeleton variant="rectangular" height={450} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} />
+        </Grid>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Grid container spacing={1.5}>
+            {[1, 2, 3, 4].map((i) => (<Grid size={{ xs: 6 }} key={i}><Skeleton variant="rectangular" height={218} sx={{ borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)' }} /></Grid>))}
+          </Grid>
+        </Grid>
+      </Grid>
+    </Container>
+  </Box>
+);
+
+// Payment Plan Bar Component
+const PaymentPlanBar = ({ paymentPlan, bookingAmount }) => {
+  const parts = paymentPlan.split('/').map(p => parseInt(p) || 0);
+  const labels = ['Booking', 'During Construction', 'On Handover', 'Post Handover'];
+  const colors = ['#C6A962', '#1E3A5F', '#0F2237', '#0B1A2A'];
+  
+  const validParts = parts.map((p, i) => ({ percentage: p, label: labels[i], color: colors[i] })).filter(p => p.percentage > 0);
+
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
+        Payment Plan
+      </Typography>
+      
+      <Box sx={{ display: 'flex', borderRadius: 2, overflow: 'hidden', height: { xs: 50, md: 60 }, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        {validParts.map((part, i) => (
+          <Box key={i} sx={{ width: `${part.percentage}%`, bgcolor: part.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', transition: 'all 0.3s ease', cursor: 'pointer', '&:hover': { filter: 'brightness(1.1)', transform: 'scaleY(1.05)' } }}>
+            <Typography sx={{ color: i === 0 ? '#0B1A2A' : '#FFFFFF', fontWeight: 700, fontSize: { xs: '1rem', md: '1.25rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', lineHeight: 1 }}>{part.percentage}%</Typography>
+          </Box>
+        ))}
+      </Box>
+
+      <Box sx={{ display: 'flex', mt: 1.5 }}>
+        {validParts.map((part, i) => (
+          <Box key={i} sx={{ width: `${part.percentage}%`, textAlign: 'center', px: 0.5 }}>
+            <Typography sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem', md: '0.8rem' }, color: '#64748B', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{part.label}</Typography>
+          </Box>
+        ))}
+      </Box>
+
+      {bookingAmount && (
+        <Box sx={{ mt: 2, p: 2, bgcolor: '#F8FAFC', borderRadius: 2, border: '1px dashed #C6A962' }}>
+          <Typography sx={{ fontSize: '0.85rem', color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', textAlign: 'center' }}>
+            Booking Amount: <Box component="span" sx={{ color: '#C6A962', fontWeight: 700 }}>AED {formatPrice(bookingAmount)}</Box>
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+// Amenities Section Component
+const AmenitiesSection = ({ amenities }) => {
+  const [showAll, setShowAll] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
+  const visibleCount = isMobile ? 6 : 8;
+  const hasMore = amenities.length > visibleCount;
+
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Amenities</Typography>
+
+      <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 2, mb: 2, '&::-webkit-scrollbar': { height: 4 }, '&::-webkit-scrollbar-track': { bgcolor: '#F1F5F9', borderRadius: 2 }, '&::-webkit-scrollbar-thumb': { bgcolor: '#C6A962', borderRadius: 2 } }}>
+        {amenities.slice(0, showAll ? amenities.length : visibleCount).map((amenity, i) => {
+          const IconComponent = amenityIcons[amenity] || amenityIcons['Default'];
+          return (
+            <Chip key={i} icon={<IconComponent size={16} color="#C6A962" />} label={amenity} sx={{ bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 3, px: 1, py: 2.5, fontSize: { xs: '0.75rem', md: '0.85rem' }, fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', color: '#334155', flexShrink: 0, transition: 'all 0.2s', '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8', transform: 'translateY(-2px)' }, '& .MuiChip-icon': { ml: 1 } }} />
+          );
+        })}
+      </Box>
+
+      {hasMore && (
+        <Button onClick={() => setShowAll(!showAll)} endIcon={showAll ? <ChevronUp size={16} /> : <ChevronDown size={16} />} sx={{ color: '#C6A962', fontWeight: 600, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(198, 169, 98, 0.1)' } }}>
+          {showAll ? 'Show Less' : `+${amenities.length - visibleCount} More Amenities`}
+        </Button>
+      )}
+
+      <Collapse in={showAll}>
+        <Grid container spacing={1.5} sx={{ mt: 1 }}>
+          {amenities.slice(visibleCount).map((amenity, i) => {
+            const IconComponent = amenityIcons[amenity] || amenityIcons['Default'];
+            return (
+              <Grid size={{ xs: 6, sm: 4, md: 3 }} key={i}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2, borderRadius: 2, bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', transition: 'all 0.2s', '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8' } }}>
+                  <IconComponent size={18} color="#C6A962" />
+                  <Typography sx={{ fontSize: '0.8rem', color: '#334155', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{amenity}</Typography>
+                </Box>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </Collapse>
+    </Box>
+  );
+};
+
+// Location Section
+const LocationSection = ({ nearbyLocations, locationLink, location, projectName }) => {
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
+        Location
+      </Typography>
+
+      <Paper elevation={0} sx={{ borderRadius: 3, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        <Grid container>
+          <Grid size={{ xs: 12, md: 5 }} sx={{ order: { xs: 2, md: 1 } }}>
+            <Box sx={{ bgcolor: '#FFFFFF', height: '100%' }}>
+              {nearbyLocations.length > 0 ? (
+                <Box sx={{ maxHeight: { xs: 'auto', md: 400 }, overflowY: 'auto' }}>
+                  {nearbyLocations.map((place, i) => {
+                    const IconComponent = getLocationIcon(place.place_name);
+                    return (
+                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 2, md: 2.5 }, py: { xs: 2, md: 2.5 }, borderBottom: '1px solid #F1F5F9', transition: 'all 0.2s ease', '&:hover': { bgcolor: '#FFFDF8' } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, md: 2 }, flex: 1, minWidth: 0 }}>
+                          <Box sx={{ minWidth: { xs: 28, md: 32 }, width: { xs: 28, md: 32 }, height: { xs: 28, md: 32 }, borderRadius: '50%', bgcolor: '#0B1A2A', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: { xs: '0.8rem', md: '0.9rem' }, fontFamily: '"Quicksand", sans-serif', flexShrink: 0 }}>{i + 1}</Box>
+                          <Box sx={{ width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 }, borderRadius: 2, bgcolor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid #E2E8F0' }}><IconComponent size={18} color="#C6A962" /></Box>
+                          <Typography sx={{ fontSize: { xs: '0.9rem', md: '0.95rem' }, fontWeight: 600, color: '#0B1A2A', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{place.place_name}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: { xs: 1.5, md: 2 }, py: 0.75, bgcolor: '#F8FAFC', borderRadius: 5, border: '1px solid #E2E8F0' }}>
+                            <Car size={14} color="#64748B" />
+                            <Typography sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' }, fontWeight: 600, color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', whiteSpace: 'nowrap' }}>{place.distance_value} {place.distance_unit}</Typography>
+                          </Box>
+                          {place.place_link && (
+                            <IconButton component="a" href={place.place_link} target="_blank" size="small" sx={{ bgcolor: '#C6A962', color: '#0B1A2A', width: 32, height: 32, '&:hover': { bgcolor: '#D4BC7D' } }}><Navigation size={16} /></IconButton>
+                          )}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              ) : (
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <MapPin size={40} color="#E2E8F0" />
+                  <Typography sx={{ color: '#94A3B8', mt: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Nearby locations coming soon</Typography>
+                </Box>
+              )}
+              <Box sx={{ display: { xs: 'block', md: 'none' }, p: 2, borderTop: '1px solid #E2E8F0' }}>
+                <Button fullWidth variant="contained" startIcon={<Navigation size={18} />} href={locationLink || `https://www.google.com/maps/search/${encodeURIComponent(location)}`} target="_blank" sx={{ bgcolor: '#0B1A2A', color: '#FFFFFF', py: 1.5, fontWeight: 700, borderRadius: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: '#1E3A5F' } }}>Get Directions</Button>
+              </Box>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, md: 7 }} sx={{ order: { xs: 1, md: 2 } }}>
+            <Box sx={{ position: 'relative', height: { xs: 250, md: '100%' }, minHeight: { md: 400 }, bgcolor: '#E8EEF4' }}>
+              <LocationMap locationLink={locationLink} projectName={projectName} height="100%" />
+              <Button variant="contained" startIcon={<MapPin size={16} />} href={locationLink || `https://www.google.com/maps/search/${encodeURIComponent(location)}`} target="_blank" sx={{ position: 'absolute', bottom: 16, right: 16, bgcolor: 'rgba(255,255,255,0.95)', color: '#0B1A2A', fontWeight: 600, borderRadius: 2, px: 2, py: 1, fontSize: '0.8rem', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', zIndex: 1000, '&:hover': { bgcolor: '#FFFFFF' } }}>View Full Map</Button>
+            </Box>
+          </Grid>
+        </Grid>
+        <Box sx={{ display: { xs: 'none', md: 'block' }, p: 2.5, bgcolor: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
+          <Button fullWidth variant="contained" startIcon={<Navigation size={18} />} href={locationLink || `https://www.google.com/maps/search/${encodeURIComponent(location)}`} target="_blank" sx={{ bgcolor: '#0B1A2A', color: '#FFFFFF', py: 1.5, fontWeight: 700, borderRadius: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: '#1E3A5F' } }}>Get Directions on Google Maps</Button>
+        </Box>
+      </Paper>
+    </Box>
+  );
+};
+
+// FAQs Section Component
+const FAQSection = ({ faqs }) => {
+  const [expanded, setExpanded] = useState(0);
+
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Frequently Asked Questions</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {faqs.map((faq, i) => (
+          <Paper key={i} elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: expanded === i ? '#C6A962' : '#E2E8F0', overflow: 'hidden', transition: 'all 0.2s' }}>
+            <Box onClick={() => setExpanded(expanded === i ? -1 : i)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: { xs: 2, md: 2.5 }, cursor: 'pointer', bgcolor: expanded === i ? '#FFFDF8' : '#FFFFFF', transition: 'all 0.2s', '&:hover': { bgcolor: '#FAFAFA' } }}>
+              <Typography sx={{ fontWeight: 600, color: '#0B1A2A', fontSize: { xs: '0.9rem', md: '1rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', pr: 2 }}>{faq.question}</Typography>
+              <IconButton size="small" sx={{ flexShrink: 0 }}>{expanded === i ? <ChevronUp size={20} color="#C6A962" /> : <ChevronDown size={20} color="#64748B" />}</IconButton>
+            </Box>
+            <Collapse in={expanded === i}>
+              <Box sx={{ px: { xs: 2, md: 2.5 }, pb: { xs: 2, md: 2.5 }, pt: 0 }}>
+                <Divider sx={{ mb: 2 }} />
+                <Typography sx={{ color: '#64748B', fontSize: { xs: '0.85rem', md: '0.9rem' }, lineHeight: 1.7, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{faq.answer}</Typography>
+              </Box>
+            </Collapse>
+          </Paper>
+        ))}
+      </Box>
+    </Box>
+  );
+};
+
+// ============ SIDEBAR FORM COMPONENT (MODIFIED) ============
+const SidebarForm = ({ phone1, brochure }) => {
+  const { handleRequestInformation, handleBrochureClick, handleWhatsAppClick, isLeadSubmitted } = useLeadCapture();
+
+  const handleFormClick = () => {
+    handleRequestInformation();
+  };
+
+  const handleBrochureDownload = () => {
+    if (brochure) {
+      const brochureUrl = brochure.file_path?.startsWith('/') ? brochure.file_path : `/${brochure.file_path}`;
+      handleBrochureClick(brochureUrl);
+    }
+  };
+
+  const handleWhatsApp = () => {
+    const phoneNumber = phone1 || '+971588529900';
+    handleWhatsAppClick(phoneNumber);
+  };
+
+  // If lead already submitted, show thank you state
+  if (isLeadSubmitted()) {
+    return (
+      <Paper elevation={0} sx={{ p: 3, borderRadius: 2, bgcolor: '#0B1A2A', position: 'sticky', top: 100 }}>
+        <Box sx={{ textAlign: 'center', py: 2 }}>
+          <CheckCircle2 size={40} color="#10B981" />
+          <Typography sx={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFFFFF', mt: 2, mb: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Thank You!</Typography>
+          <Typography sx={{ fontSize: '0.85rem', color: '#94A3B8', mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Our team will contact you shortly</Typography>
+        </Box>
+        <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.1)' }} />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Button fullWidth variant="outlined" startIcon={<Phone size={18} />} href={`tel:${phone1 || '+971588529900'}`} sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)', borderColor: '#FFFFFF' } }}>{phone1 || '+971 58 852 9900'}</Button>
+          <Button fullWidth variant="outlined" startIcon={<MessageCircle size={18} />} onClick={handleWhatsApp} sx={{ borderColor: '#25D366', color: '#25D366', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(37, 211, 102, 0.1)' } }}>WhatsApp</Button>
+        </Box>
+        {brochure && (
+          <Button fullWidth variant="text" startIcon={<Download size={18} />} onClick={handleBrochureDownload} sx={{ color: '#C6A962', fontWeight: 600, mt: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Download Brochure</Button>
+        )}
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2.5, mt: 3, pt: 2, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          {[{ icon: Shield, label: 'RERA' }, { icon: Award, label: 'Trusted' }, { icon: TrendingUp, label: 'Best ROI' }].map((badge, i) => (
+            <Box key={i} sx={{ textAlign: 'center' }}>
+              <badge.icon size={22} color="#C6A962" />
+              <Typography sx={{ fontSize: '0.6rem', color: '#64748B', mt: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{badge.label}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+    );
+  }
+
+  // Show form
+  return (
+    <Paper elevation={0} sx={{ p: 3, borderRadius: 2, bgcolor: '#0B1A2A', position: 'sticky', top: 100 }}>
+      <Typography sx={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFFFFF', mb: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Interested?</Typography>
+      <Typography sx={{ fontSize: '0.85rem', color: '#94A3B8', mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Get exclusive pricing and floor plans</Typography>
+      
+      {/* Click anywhere opens popup */}
+      <Box onClick={handleFormClick} sx={{ cursor: 'pointer' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField fullWidth placeholder="Your Name" size="small" InputProps={{ readOnly: true }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: '#0F2237', color: '#FFFFFF', cursor: 'pointer', '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' }, '&:hover fieldset': { borderColor: '#C6A962' } }, '& .MuiOutlinedInput-input::placeholder': { color: '#64748B', opacity: 1 } }} />
+          <TextField fullWidth placeholder="Email" size="small" InputProps={{ readOnly: true }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: '#0F2237', color: '#FFFFFF', cursor: 'pointer', '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' }, '&:hover fieldset': { borderColor: '#C6A962' } }, '& .MuiOutlinedInput-input::placeholder': { color: '#64748B', opacity: 1 } }} />
+          <TextField fullWidth placeholder="Phone" size="small" InputProps={{ readOnly: true }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: '#0F2237', color: '#FFFFFF', cursor: 'pointer', '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' }, '&:hover fieldset': { borderColor: '#C6A962' } }, '& .MuiOutlinedInput-input::placeholder': { color: '#64748B', opacity: 1 } }} />
+          <Button fullWidth variant="contained" sx={{ bgcolor: '#C6A962', color: '#0B1A2A', py: 1.5, fontWeight: 700, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: '#D4BC7D' } }}>Request Information</Button>
+        </Box>
+      </Box>
+
+      <Divider sx={{ my: 3, borderColor: 'rgba(255,255,255,0.1)' }} />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Button fullWidth variant="outlined" startIcon={<Phone size={18} />} href={`tel:${phone1 || '+971588529900'}`} sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(255,255,255,0.05)', borderColor: '#FFFFFF' } }}>{phone1 || '+971 58 852 9900'}</Button>
+        <Button fullWidth variant="outlined" startIcon={<MessageCircle size={18} />} onClick={handleWhatsApp} sx={{ borderColor: '#25D366', color: '#25D366', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(37, 211, 102, 0.1)' } }}>WhatsApp</Button>
+      </Box>
+      {brochure && (
+        <Button fullWidth variant="text" startIcon={<Download size={18} />} onClick={handleBrochureDownload} sx={{ color: '#C6A962', fontWeight: 600, mt: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Download Brochure</Button>
+      )}
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2.5, mt: 3, pt: 2, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        {[{ icon: Shield, label: 'RERA' }, { icon: Award, label: 'Trusted' }, { icon: TrendingUp, label: 'Best ROI' }].map((badge, i) => (
+          <Box key={i} sx={{ textAlign: 'center' }}>
+            <badge.icon size={22} color="#C6A962" />
+            <Typography sx={{ fontSize: '0.6rem', color: '#64748B', mt: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{badge.label}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </Paper>
+  );
+};
+
+// ============ AVAILABLE UNITS SECTION (MODIFIED) ============
+const AvailableUnitsSection = ({ configurations }) => {
+  const { handleViewPlanClick } = useLeadCapture();
+
+  const onViewPlan = (configIndex) => {
+    // This callback runs after lead is captured (or if already captured)
+    // You can open a modal, scroll to floor plans, etc.
+    console.log('View plan for config:', configIndex);
+    // Example: Show floor plan modal or scroll to section
+  };
+
+  return (
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Available Units</Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {configurations.map((config, i) => (
+          <Paper key={i} elevation={0} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: { xs: 2, md: 2.5 }, borderRadius: 2, border: '1px solid #E2E8F0', flexWrap: 'wrap', gap: 2, transition: 'all 0.2s', '&:hover': { borderColor: '#C6A962', bgcolor: '#FFFDF8' } }}>
+            <Box>
+              <Typography sx={{ fontWeight: 600, color: '#0B1A2A', fontSize: { xs: '0.9rem', md: '1rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{config.type}</Typography>
+              <Typography sx={{ fontSize: { xs: '0.75rem', md: '0.85rem' }, color: '#64748B', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{formatConfigArea(config)}</Typography>
+            </Box>
+            <Box sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
+              <Typography sx={{ fontWeight: 700, color: '#C6A962', fontSize: { xs: '1rem', md: '1.15rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{formatConfigPrice(config)}</Typography>
+              {config.units_available && <Typography sx={{ fontSize: '0.7rem', color: '#94A3B8', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{config.units_available} units left</Typography>}
+            </Box>
+            <Button 
+              variant="outlined" 
+              endIcon={<ArrowUpRight size={14} />} 
+              onClick={() => handleViewPlanClick(i, onViewPlan)} 
+              sx={{ borderColor: '#C6A962', color: '#C6A962', borderRadius: 1.5, fontWeight: 600, fontSize: { xs: '0.75rem', md: '0.85rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: '#C6A962', color: '#FFFFFF' } }}
+            >
+              View Plan
+            </Button>
+          </Paper>
+        ))}
+      </Box>
+    </Box>
+  );
+};
+
+// ============ PRICE CARD COMPONENT (MODIFIED) ============
+const PriceCard = ({ price, roi, phone1 }) => {
+  const { handleRequestPriceList, handleWhatsAppClick, isLeadSubmitted } = useLeadCapture();
+
+  const handleRequestClick = () => {
+    handleRequestPriceList();
+  };
+
+  const handleWhatsApp = () => {
+    const phoneNumber = phone1 || '+971588529900';
+    handleWhatsAppClick(phoneNumber);
+  };
+
+  return (
+    <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '2px solid #C6A962', bgcolor: 'rgba(198, 169, 98, 0.08)' }}>
+      <Typography sx={{ fontSize: '0.75rem', color: '#94A3B8', mb: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Starting Price</Typography>
+      <Typography sx={{ fontSize: '2rem', fontWeight: 700, color: '#FFFFFF', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', mb: 0.5, lineHeight: 1 }}>
+        <Box component="span" sx={{ color: '#C6A962', fontSize: '1rem' }}>AED </Box>{price}
+      </Typography>
+      {roi && <Chip icon={<TrendingUp size={14} />} label={`Expected ROI: ${roi}%`} size="small" sx={{ mb: 2, bgcolor: 'rgba(16, 185, 129, 0.15)', color: '#10B981', fontWeight: 600, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '& .MuiChip-icon': { color: '#10B981' } }} />}
+      
+      <Button 
+        fullWidth 
+        variant="contained" 
+        onClick={handleRequestClick} 
+        sx={{ bgcolor: '#C6A962', color: '#0B1A2A', py: 1.5, fontWeight: 700, borderRadius: 1.5, mb: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: '#D4BC7D' } }}
+      >
+        {isLeadSubmitted() ? 'Price List Sent ✓' : 'Request Price List'}
+      </Button>
+      
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button fullWidth variant="outlined" startIcon={<Phone size={16} />} href={`tel:${phone1 || '+971588529900'}`} sx={{ borderColor: 'rgba(255,255,255,0.3)', color: '#FFFFFF', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', borderColor: '#FFFFFF' } }}>Call</Button>
+        <Button fullWidth variant="outlined" startIcon={<MessageCircle size={16} />} onClick={handleWhatsApp} sx={{ borderColor: '#25D366', color: '#25D366', fontWeight: 600, borderRadius: 1.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', '&:hover': { bgcolor: 'rgba(37, 211, 102, 0.1)' } }}>WhatsApp</Button>
+      </Box>
+    </Paper>
+  );
+};
+
+// ============ MAIN CONTENT COMPONENT ============
+const ProjectDetailsContent = ({ project, projectId, developerSlug }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Fetch projects from database
-  const { projects, loading, error, fetchProjects } = useProjects();
-  // Read URL search params
-  const searchParams = useSearchParams();
+  const [isSaved, setIsSaved] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  // View & Layout
-  const [viewMode, setViewMode] = useState('grid');
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-
-  // Filters
-  // const [searchQuery, setSearchQuery] = useState('');
-  // const [selectedStatus, setSelectedStatus] = useState('');
-  // const [selectedType, setSelectedType] = useState('');
-  // const [selectedBedrooms, setSelectedBedrooms] = useState('');
-  // const [priceRange, setPriceRange] = useState([0, 50000000]);
-  // const [sortBy, setSortBy] = useState('newest');
-  // Filters - Initialize from URL params
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [selectedStatus, setSelectedStatus] = useState(searchParams.get('status') || '');
-  const [selectedType, setSelectedType] = useState(searchParams.get('type') || '');
-  const [selectedBedrooms, setSelectedBedrooms] = useState(searchParams.get('beds') || '');
-  const [priceRange, setPriceRange] = useState([0, 50000000]);
-  const [sortBy, setSortBy] = useState('newest');
-
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Saved Properties
-  const [savedProperties, setSavedProperties] = useState([]);
-
-  // ✅ Fetch projects on mount
-  useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
-
-  // ✅ Debug - log projects when they change
-  useEffect(() => {
-    if (projects.length > 0) {
-      console.log('✅ Projects loaded:', projects.length);
-      console.log('📦 First project:', projects[0]);
-    }
-  }, [projects]);
-
-  // Load saved properties from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('savedProperties');
-    if (saved) {
-      setSavedProperties(JSON.parse(saved));
+    if (saved && projectId) {
+      const savedList = JSON.parse(saved);
+      setIsSaved(savedList.includes(projectId));
     }
-  }, []);
+  }, [projectId]);
 
-  // ✅ Filter and sort projects - FIXED price filter
-  const filteredProjects = useMemo(() => {
-    if (!projects || projects.length === 0) return [];
-
-    let result = [...projects];
-
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.project_name?.toLowerCase().includes(query) ||
-          p.location?.toLowerCase().includes(query) ||
-          p.locality?.toLowerCase().includes(query) ||
-          p.developer_name?.toLowerCase().includes(query) ||
-          p.area_name?.toLowerCase().includes(query)
-      );
-    }
-
-    // Status filter
-    if (selectedStatus) {
-      result = result.filter((p) => p.project_status === selectedStatus);
-    }
-
-    // Property type filter
-    if (selectedType) {
-      result = result.filter((p) => p.property_type === selectedType);
-    }
-
-    // Bedrooms filter
-    if (selectedBedrooms) {
-      if (selectedBedrooms === '4') {
-        result = result.filter((p) => p.bedrooms >= 4);
-      } else {
-        result = result.filter((p) => p.bedrooms === parseInt(selectedBedrooms));
-      }
-    }
-
-    // ✅ Price range filter - ONLY apply if user has changed the range
-    // AND only filter projects that actually have a price
-    const isPriceFilterActive = priceRange[0] > 0 || priceRange[1] < 50000000;
-    if (isPriceFilterActive) {
-      result = result.filter((p) => {
-        const price = p.starting_price || p.price || 0;
-        // If project has no price, include it anyway
-        if (!price) return true;
-        return price >= priceRange[0] && price <= priceRange[1];
-      });
-    }
-
-    // Sorting
-    switch (sortBy) {
-      case 'price_asc':
-        result.sort((a, b) => (a.starting_price || a.price || 0) - (b.starting_price || b.price || 0));
-        break;
-      case 'price_desc':
-        result.sort((a, b) => (b.starting_price || b.price || 0) - (a.starting_price || a.price || 0));
-        break;
-      case 'name_asc':
-        result.sort((a, b) => (a.project_name || '').localeCompare(b.project_name || ''));
-        break;
-      case 'newest':
-      default:
-        result.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        break;
-    }
-
-    return result;
-  }, [projects, searchQuery, selectedStatus, selectedType, selectedBedrooms, priceRange, sortBy]);
-
-  // Paginated projects
-  const paginatedProjects = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredProjects.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredProjects, currentPage]);
-
-  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
-
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedStatus, selectedType, selectedBedrooms, priceRange, sortBy]);
-
-  // Update filters when URL params change
-  useEffect(() => {
-    setSearchQuery(searchParams.get('search') || '');
-    setSelectedStatus(searchParams.get('status') || '');
-    setSelectedType(searchParams.get('type') || '');
-    setSelectedBedrooms(searchParams.get('beds') || '');
-    
-    const area = searchParams.get('area');
-    if (area) {
-      setSearchQuery(prev => prev || area);
-    }
-  }, [searchParams]);
-  
-  // Handle save property
-  const handleSaveProperty = useCallback((projectId) => {
-    setSavedProperties((prev) => {
-      const newSaved = prev.includes(projectId)
-        ? prev.filter((id) => id !== projectId)
-        : [...prev, projectId];
-      localStorage.setItem('savedProperties', JSON.stringify(newSaved));
-      return newSaved;
-    });
-  }, []);
-
-  // Reset all filters
-  const resetFilters = () => {
-    setSearchQuery('');
-    setSelectedStatus('');
-    setSelectedType('');
-    setSelectedBedrooms('');
-    setPriceRange([0, 50000000]);
-    setSortBy('newest');
-    setCurrentPage(1);
+  const handleSaveProperty = () => {
+    const saved = localStorage.getItem('savedProperties');
+    let savedList = saved ? JSON.parse(saved) : [];
+    if (isSaved) savedList = savedList.filter(id => id !== projectId);
+    else savedList.push(projectId);
+    localStorage.setItem('savedProperties', JSON.stringify(savedList));
+    setIsSaved(!isSaved);
   };
 
-  // Check if any filters are active
-  const hasActiveFilters = searchQuery || selectedStatus || selectedType || selectedBedrooms || priceRange[0] > 0 || priceRange[1] < 50000000;
+  // Extract data
+  const projectName = project.project_name;
+  const developerName = project.developer_name;
+  const developerLogo = project.developer_logo;
+  const developerDesc = project.developer_desc;
+  const locality = project.locality;
+  const projectCity = project.city || 'Dubai';
+  const location = locality ? `${locality}, ${projectCity}` : projectCity;
+  const status = project.project_status || 'Available';
+  const amenities = project.amenities || [];
+  const highlights = project.highlights || [];
+  const configurations = project.configurations || [];
+  const about = project.about || `${projectName} is an exclusive residential development by ${developerName}, offering a premium lifestyle in ${location}.`;
+  const roi = project.roi;
+  const paymentPlan = project.payment_plan || '60/40';
+  const handoverDate = project.handover_date;
+  const videoUrl = project.video_url || project.youtube_link;
+  const locationLink = project.location_link;
+  const projectType = project.project_type || project.usage_type || 'Residential';
+  const totalUnits = project.total_units;
+  const furnishingStatus = project.furnishing_status;
+  const bookingAmount = project.booking_amount;
+  const phone1 = project.phone_1;
 
-  // Format price for display
-  const formatPrice = (value) => {
-    if (value >= 1000000) {
-      return `AED ${(value / 1000000).toFixed(1)}M`;
-    }
-    return `AED ${(value / 1000).toFixed(0)}K`;
+  const bedsRange = getUnitTypes(configurations);
+  const areaRange = getAreaRange(configurations);
+  const lowestPrice = getLowestPrice(configurations);
+  const price = lowestPrice ? formatPrice(lowestPrice) : 'Price on Request';
+
+  const galleryImages = project.files?.gallery?.map(f => f.file_path?.startsWith('/') ? f.file_path : `/${f.file_path}`) || [];
+  const projectLogo = project.project_logo ? (project.project_logo.startsWith('/') ? project.project_logo : `/${project.project_logo}`) : null;
+  const projectImages = galleryImages.length > 0 ? galleryImages : projectLogo ? [projectLogo] : ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800'];
+  const videoThumbnail = projectLogo || '/images/placeholder-video.jpg';
+
+  const brochure = project.files?.brochure;
+  const faqs = project.faqs || [];
+  const nearbyLocations = project.nearby_locations || [];
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'TBA';
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   };
 
-  // Quick filter chips based on status
-  const statusChips = statusOptions.slice(1); // Exclude "All"
+  const statusStyle = getStatusStyle(status);
 
   return (
-    <Box sx={{ bgcolor: '#F8FAFC', minHeight: '100vh' }}>
-      {/* Hero Header */}
-      <Box
-        sx={{
-          background: 'linear-gradient(135deg, #0B1A2A 0%, #1a3a5c 100%)',
-          pt: { xs: 12, md: 14 },
-          pb: { xs: 4, md: 6 },
-        }}
-      >
+    <Box sx={{ bgcolor: '#FFFFFF', minHeight: '100vh', pb: { xs: 10, md: 0 } }}>
+      {/* Lead Capture Popup */}
+      <LeadCapturePopup />
+      
+      {/* Mobile Sticky CTA */}
+      <MobileStickyCTA phone={phone1} />
+
+      {/* DARK HERO SECTION */}
+      <Box sx={{ bgcolor: '#0B1A2A', pt: { xs: 10, md: 12 }, pb: 4 }}>
         <Container maxWidth="lg">
-          {/* Breadcrumbs */}
-          <Breadcrumbs
-            separator={<ChevronRight size={14} color="#94A3B8" />}
-            sx={{ mb: 2 }}
-          >
-            <MuiLink
-              component={Link}
-              href="/"
-              underline="hover"
-              sx={{ color: '#94A3B8', fontSize: '0.85rem', fontFamily: '"Quicksand", sans-serif' }}
-            >
-              Home
-            </MuiLink>
-            <Typography sx={{ color: '#C6A962', fontSize: '0.85rem', fontFamily: '"Quicksand", sans-serif' }}>
-              Projects
-            </Typography>
-          </Breadcrumbs>
+          {/* Image Gallery */}
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 12, md: 7 }}>
+              <Box onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }} sx={{ position: 'relative', height: { xs: 250, sm: 350, md: 450 }, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', '&:hover img': { transform: 'scale(1.03)' } }}>
+                <Box component="img" src={projectImages[0]} alt={projectName} sx={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} />
+                <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(11,26,42,0.1) 0%, rgba(11,26,42,0.4) 100%)' }} />
+                <Chip label={status.toUpperCase()} sx={{ position: 'absolute', top: 12, left: 12, bgcolor: statusStyle.bg, color: statusStyle.text, fontWeight: 700, fontSize: '0.65rem', height: 26, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }} />
+                <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 1 }}>
+                  <IconButton onClick={(e) => { e.stopPropagation(); handleSaveProperty(); }} sx={{ bgcolor: 'rgba(255,255,255,0.95)', width: 36, height: 36, '&:hover': { bgcolor: '#FFFFFF' } }}>
+                    <Heart size={16} fill={isSaved ? '#EF4444' : 'none'} color={isSaved ? '#EF4444' : '#0B1A2A'} />
+                  </IconButton>
+                  <IconButton sx={{ bgcolor: 'rgba(255,255,255,0.95)', width: 36, height: 36, '&:hover': { bgcolor: '#FFFFFF' } }}><Share2 size={16} color="#0B1A2A" /></IconButton>
+                </Box>
+                {projectImages.length > 1 && (
+                  <Button startIcon={<Image size={14} />} sx={{ position: 'absolute', bottom: 12, right: 12, bgcolor: 'rgba(255,255,255,0.95)', color: '#0B1A2A', fontWeight: 600, fontSize: '0.75rem', borderRadius: 2, px: 1.5, py: 0.5, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{projectImages.length} Photos</Button>
+                )}
+              </Box>
+            </Grid>
+            <Grid size={{ xs: 12, md: 5 }} sx={{ display: { xs: 'none', md: 'block' } }}>
+              <Grid container spacing={1.5} sx={{ height: '100%' }}>
+                {projectImages.slice(1, 4).map((img, i) => (
+                  <Grid size={{ xs: 6 }} key={i}>
+                    <Box onClick={() => { setLightboxIndex(i + 1); setLightboxOpen(true); }} sx={{ position: 'relative', height: 218, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', '&:hover img': { transform: 'scale(1.05)' } }}>
+                      <Box component="img" src={img} alt={`${projectName} ${i + 2}`} sx={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s ease' }} />
+                    </Box>
+                  </Grid>
+                ))}
+                <Grid size={{ xs: 6 }}>
+                  {videoUrl ? (
+                    <Box component="a" href={videoUrl} target="_blank" sx={{ position: 'relative', height: 218, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', display: 'block', textDecoration: 'none' }}>
+                      <Box component="img" src={videoThumbnail} alt="Video" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(11,26,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 0.5 }}>
+                        <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#C6A962', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={24} color="#0B1A2A" fill="#0B1A2A" /></Box>
+                        <Typography sx={{ color: '#FFFFFF', fontSize: '0.75rem', fontWeight: 600, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>Watch Video</Typography>
+                      </Box>
+                    </Box>
+                  ) : projectImages[4] ? (
+                    <Box onClick={() => { setLightboxIndex(4); setLightboxOpen(true); }} sx={{ position: 'relative', height: 218, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', '&:hover img': { transform: 'scale(1.05)' } }}>
+                      <Box component="img" src={projectImages[4]} alt={`${projectName} 5`} sx={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.4s ease' }} />
+                    </Box>
+                  ) : (
+                    <Box sx={{ height: 218, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Image size={32} color="#64748B" />
+                    </Box>
+                  )}
+                </Grid>
+              </Grid>
+            </Grid>
+          </Grid>
 
-          {/* Title */}
-          <Typography
-            variant="h1"
-            sx={{
-              color: '#FFFFFF',
-              fontFamily: '"Quicksand", sans-serif',
-              fontWeight: 700,
-              fontSize: { xs: '1.75rem', md: '2.5rem' },
-              mb: 1,
-            }}
-          >
-            Explore{' '}
-            <Box
-              component="span"
-              sx={{
-                background: 'linear-gradient(135deg, #C6A962 0%, #E8D5A3 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              Premium Projects
+          {/* Mobile Gallery Thumbnails */}
+          {isMobile && projectImages.length > 1 && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 1.5, overflowX: 'auto', pb: 1 }}>
+              {projectImages.slice(1, 5).map((img, i) => (
+                <Box key={i} onClick={() => { setLightboxIndex(i + 1); setLightboxOpen(true); }} sx={{ width: 70, height: 50, borderRadius: 1, overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}>
+                  <Box component="img" src={img} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </Box>
+              ))}
+              {videoUrl && (
+                <Box component="a" href={videoUrl} target="_blank" sx={{ width: 70, height: 50, borderRadius: 1, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+                  <Box component="img" src={videoThumbnail} alt="Video" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Play size={20} color="#C6A962" />
+                  </Box>
+                </Box>
+              )}
             </Box>
-          </Typography>
+          )}
 
-          <Typography
-            sx={{
-              color: '#94A3B8',
-              fontSize: '0.95rem',
-              fontFamily: '"Quicksand", sans-serif',
-              maxWidth: 500,
-              mb: 3,
-            }}
-          >
-            Discover exceptional off-plan and ready properties across Dubai&apos;s most prestigious locations
-          </Typography>
-
-          {/* Search Bar */}
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-              flexDirection: { xs: 'column', md: 'row' },
-              maxWidth: 800,
-            }}
-          >
-            <TextField
-              placeholder="Search by project, location, or developer..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              fullWidth
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search size={20} color="#64748B" />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                bgcolor: '#FFFFFF',
-                borderRadius: 2,
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  fontFamily: '"Quicksand", sans-serif',
-                  '& fieldset': { border: 'none' },
-                },
-              }}
-            />
-            <Button
-              variant="contained"
-              startIcon={<SlidersHorizontal size={18} />}
-              onClick={() => setFilterDrawerOpen(true)}
-              sx={{
-                bgcolor: '#C6A962',
-                color: '#FFFFFF',
-                px: 3,
-                borderRadius: 2,
-                fontFamily: '"Quicksand", sans-serif',
-                fontWeight: 600,
-                textTransform: 'none',
-                whiteSpace: 'nowrap',
-                '&:hover': { bgcolor: '#B89A52' },
-              }}
-            >
-              Filters {hasActiveFilters && `(${[selectedStatus, selectedType, selectedBedrooms].filter(Boolean).length + (priceRange[0] > 0 || priceRange[1] < 50000000 ? 1 : 0)})`}
-            </Button>
+          {/* Project Header */}
+          <Box sx={{ mt: { xs: 3, md: 4 } }}>
+            <Grid container spacing={{ xs: 2, md: 3 }} alignItems="flex-start">
+              <Grid size={{ xs: 12, md: 8 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+                  <Avatar src={developerLogo ? (developerLogo.startsWith('/') ? developerLogo : `/${developerLogo}`) : undefined} sx={{ width: { xs: 32, md: 40 }, height: { xs: 32, md: 40 }, border: '2px solid rgba(198, 169, 98, 0.3)', bgcolor: '#0F2237', fontSize: '0.9rem' }}>
+                    {developerName?.charAt(0) || '🏢'}
+                  </Avatar>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography sx={{ fontSize: { xs: '0.75rem', md: '0.85rem' }, color: '#94A3B8', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>by {developerName}</Typography>
+                    <BadgeCheck size={14} color="#C6A962" />
+                  </Box>
+                </Box>
+                <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.25rem' }, fontWeight: 700, color: '#FFFFFF', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', mb: 1, lineHeight: 1.2 }}>{projectName}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 3 }}>
+                  <MapPin size={16} color="#C6A962" />
+                  <Typography sx={{ color: '#CBD5E1', fontSize: { xs: '0.85rem', md: '0.95rem' }, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{location}</Typography>
+                </Box>
+                
+                {/* Stats */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 2, md: 3 } }}>
+                  {[
+                    { icon: Bed, label: 'Bedrooms', value: bedsRange },
+                    { icon: Maximize2, label: 'Size', value: areaRange !== '-' ? `${areaRange} sqft` : '-' },
+                    { icon: Calendar, label: 'Handover', value: formatDate(handoverDate) },
+                    { icon: Building2, label: 'Type', value: projectType }
+                  ].map((stat, i) => (
+                    <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: { xs: 32, md: 40 }, height: { xs: 32, md: 40 }, borderRadius: 1.5, bgcolor: 'rgba(198, 169, 98, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <stat.icon size={isMobile ? 14 : 18} color="#C6A962" />
+                      </Box>
+                      <Box>
+                        <Typography sx={{ fontSize: { xs: '0.6rem', md: '0.7rem' }, color: '#64748B', textTransform: 'uppercase', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', letterSpacing: 0.5 }}>{stat.label}</Typography>
+                        <Typography sx={{ fontSize: { xs: '0.75rem', md: '0.9rem' }, fontWeight: 600, color: '#FFFFFF', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{stat.value}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Grid>
+              
+              {/* Price Card - Desktop */}
+              <Grid size={{ xs: 12, md: 4 }} sx={{ display: { xs: 'none', md: 'block' } }}>
+                <PriceCard price={price} roi={roi} phone1={phone1} />
+              </Grid>
+            </Grid>
           </Box>
         </Container>
       </Box>
 
       {/* Main Content */}
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        {/* Quick Filters & Controls */}
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 2,
-            mb: 3,
-          }}
-        >
-          {/* Status Quick Filters */}
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label="All"
-              onClick={() => setSelectedStatus('')}
-              sx={{
-                bgcolor: !selectedStatus ? '#C6A962' : 'transparent',
-                color: !selectedStatus ? '#FFFFFF' : '#0B1A2A',
-                border: '1.5px solid',
-                borderColor: !selectedStatus ? '#C6A962' : '#E2E8F0',
-                fontWeight: 600,
-                fontFamily: '"Quicksand", sans-serif',
-                '&:hover': { bgcolor: !selectedStatus ? '#C6A962' : 'rgba(198, 169, 98, 0.1)' },
-              }}
-            />
-            {statusChips.map((status) => (
-              <Chip
-                key={status.value}
-                label={status.label}
-                onClick={() => setSelectedStatus(status.value)}
-                sx={{
-                  bgcolor: selectedStatus === status.value ? '#C6A962' : 'transparent',
-                  color: selectedStatus === status.value ? '#FFFFFF' : '#0B1A2A',
-                  border: '1.5px solid',
-                  borderColor: selectedStatus === status.value ? '#C6A962' : '#E2E8F0',
-                  fontWeight: 600,
-                  fontFamily: '"Quicksand", sans-serif',
-                  '&:hover': {
-                    bgcolor: selectedStatus === status.value ? '#C6A962' : 'rgba(198, 169, 98, 0.1)',
-                  },
-                }}
-              />
-            ))}
-          </Box>
-
-          {/* Right Controls */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {/* Results Count */}
-            <Typography
-              sx={{
-                color: '#64748B',
-                fontSize: '0.875rem',
-                fontFamily: '"Quicksand", sans-serif',
-              }}
-            >
-              {filteredProjects.length} {filteredProjects.length === 1 ? 'Project' : 'Projects'}
-            </Typography>
-
-            {/* Sort */}
-            <FormControl size="small" sx={{ minWidth: 150 }}>
-              <Select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                startAdornment={<ArrowUpDown size={14} style={{ marginRight: 8 }} />}
-                sx={{
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontSize: '0.875rem',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E2E8F0' },
-                }}
-              >
-                {sortOptions.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {/* View Toggle */}
-            <Box
-              sx={{
-                display: { xs: 'none', sm: 'flex' },
-                bgcolor: '#FFFFFF',
-                borderRadius: 1,
-                border: '1px solid #E2E8F0',
-              }}
-            >
-              <IconButton
-                onClick={() => setViewMode('grid')}
-                sx={{
-                  bgcolor: viewMode === 'grid' ? '#C6A962' : 'transparent',
-                  color: viewMode === 'grid' ? '#FFFFFF' : '#64748B',
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: viewMode === 'grid' ? '#C6A962' : '#F1F5F9' },
-                }}
-              >
-                <Grid3X3 size={18} />
-              </IconButton>
-              <IconButton
-                onClick={() => setViewMode('list')}
-                sx={{
-                  bgcolor: viewMode === 'list' ? '#C6A962' : 'transparent',
-                  color: viewMode === 'list' ? '#FFFFFF' : '#64748B',
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: viewMode === 'list' ? '#C6A962' : '#F1F5F9' },
-                }}
-              >
-                <List size={18} />
-              </IconButton>
-            </Box>
-          </Box>
-        </Box>
-
-        {/* Active Filters Display */}
-        {hasActiveFilters && (
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
-            {searchQuery && (
-              <Chip
-                label={`Search: "${searchQuery}"`}
-                onDelete={() => setSearchQuery('')}
-                size="small"
-                sx={{ fontFamily: '"Quicksand", sans-serif' }}
-              />
-            )}
-            {selectedType && (
-              <Chip
-                label={`Type: ${selectedType}`}
-                onDelete={() => setSelectedType('')}
-                size="small"
-                sx={{ fontFamily: '"Quicksand", sans-serif' }}
-              />
-            )}
-            {selectedBedrooms && (
-              <Chip
-                label={`Beds: ${selectedBedrooms === '0' ? 'Studio' : selectedBedrooms === '4' ? '4+' : selectedBedrooms}`}
-                onDelete={() => setSelectedBedrooms('')}
-                size="small"
-                sx={{ fontFamily: '"Quicksand", sans-serif' }}
-              />
-            )}
-            {(priceRange[0] > 0 || priceRange[1] < 50000000) && (
-              <Chip
-                label={`Price: ${formatPrice(priceRange[0])} - ${formatPrice(priceRange[1])}`}
-                onDelete={() => setPriceRange([0, 50000000])}
-                size="small"
-                sx={{ fontFamily: '"Quicksand", sans-serif' }}
-              />
-            )}
-            <Chip
-              icon={<RotateCcw size={14} />}
-              label="Reset All"
-              onClick={resetFilters}
-              size="small"
-              sx={{
-                fontFamily: '"Quicksand", sans-serif',
-                color: '#C6A962',
-                borderColor: '#C6A962',
-                '&:hover': { bgcolor: 'rgba(198, 169, 98, 0.1)' },
-              }}
-              variant="outlined"
-            />
-          </Box>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <Grid container spacing={3}>
-            {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
-              <Grid item xs={12} sm={6} md={viewMode === 'grid' ? 4 : 6} key={index}>
-                <ProjectCardSkeleton />
-              </Grid>
-            ))}
-          </Grid>
-        )}
-
-        {/* Error State */}
-        {error && !loading && (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: 8,
-              bgcolor: '#FFFFFF',
-              borderRadius: 2,
-              border: '1px solid #E2E8F0',
-            }}
-          >
-            <Typography color="error" sx={{ mb: 2, fontFamily: '"Quicksand", sans-serif' }}>
-              {error}
-            </Typography>
-            <Button
-              variant="outlined"
-              onClick={() => fetchProjects()}
-              sx={{ borderColor: '#C6A962', color: '#C6A962' }}
-            >
-              Try Again
-            </Button>
-          </Box>
-        )}
-
-        {/* Projects Grid */}
-        {!loading && !error && (
-          <>
-            {paginatedProjects.length > 0 ? (
-              <Grid container spacing={2.5}>
-                {paginatedProjects.map((project) => (
-                  <Grid
-                    size={{ xs: 12, sm: 6, md: viewMode === 'grid' ? 4 : 6 }}
-                    key={project.project_id}
-                  >
-                    <ProjectCard
-                      project={project}
-                      savedProperties={savedProperties}
-                      onSaveProperty={handleSaveProperty}
-                      onInquiry={() => console.log('Inquiry:', project.project_id)}
-                    />
+      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
+        <Grid container spacing={{ xs: 3, md: 4 }}>
+          <Grid size={{ xs: 12, md: 8 }}>
+            {/* About */}
+            <Box sx={{ mb: 5 }}>
+              <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#0B1A2A', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>About {projectName}</Typography>
+              <Typography sx={{ color: '#475569', lineHeight: 1.9, fontSize: { xs: '0.9rem', md: '1rem' }, mb: 3, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{about}</Typography>
+              
+              {/* Highlights */}
+              <Grid container spacing={1.5}>
+                {(highlights.length > 0 ? highlights : [`${bedsRange}`, `${paymentPlan} Payment Plan`, roi ? `ROI: ${roi}%` : null, `Handover: ${formatDate(handoverDate)}`, totalUnits ? `${totalUnits} Units` : null, furnishingStatus].filter(Boolean)).map((h, i) => (
+                  <Grid size={{ xs: 12, sm: 6 }} key={i}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, bgcolor: '#F1F5F9', borderRadius: 2 }}>
+                      <CheckCircle2 size={18} color="#C6A962" />
+                      <Typography sx={{ fontSize: { xs: '0.8rem', md: '0.9rem' }, color: '#334155', fontWeight: 500, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{h}</Typography>
+                    </Box>
                   </Grid>
                 ))}
               </Grid>
-            ) : (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  py: 8,
-                  bgcolor: '#FFFFFF',
-                  borderRadius: 2,
-                  border: '1px solid #E2E8F0',
-                }}
-              >
-                <Building2 size={48} color="#CBD5E1" style={{ marginBottom: 16 }} />
-                <Typography
-                  sx={{
-                    color: '#64748B',
-                    fontFamily: '"Quicksand", sans-serif',
-                    mb: 2,
-                  }}
-                >
-                  No projects found matching your criteria
-                </Typography>
-                <Button
-                  variant="outlined"
-                  onClick={resetFilters}
-                  startIcon={<RotateCcw size={16} />}
-                  sx={{
-                    borderColor: '#C6A962',
-                    color: '#C6A962',
-                    fontFamily: '"Quicksand", sans-serif',
-                    '&:hover': { bgcolor: 'rgba(198, 169, 98, 0.1)' },
-                  }}
-                >
-                  Clear Filters
-                </Button>
-              </Box>
-            )}
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}>
-                <Pagination
-                  count={totalPages}
-                  page={currentPage}
-                  onChange={(_, page) => {
-                    setCurrentPage(page);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  sx={{
-                    '& .MuiPaginationItem-root': {
-                      fontFamily: '"Quicksand", sans-serif',
-                      fontWeight: 600,
-                      '&.Mui-selected': {
-                        bgcolor: '#C6A962',
-                        color: '#FFFFFF',
-                        '&:hover': { bgcolor: '#B89A52' },
-                      },
-                    },
-                  }}
-                />
-              </Box>
-            )}
-          </>
-        )}
-      </Container>
-
-      {/* Filter Drawer */}
-      <Drawer
-        anchor={isMobile ? 'bottom' : 'right'}
-        open={filterDrawerOpen}
-        onClose={() => setFilterDrawerOpen(false)}
-        PaperProps={{
-          sx: {
-            width: isMobile ? '100%' : 380,
-            height: isMobile ? '85vh' : '100%',
-            borderRadius: isMobile ? '16px 16px 0 0' : 0,
-          },
-        }}
-      >
-        <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography
-              sx={{
-                fontFamily: '"Quicksand", sans-serif',
-                fontWeight: 700,
-                fontSize: '1.25rem',
-                color: '#0B1A2A',
-              }}
-            >
-              Filter Projects
-            </Typography>
-            <IconButton onClick={() => setFilterDrawerOpen(false)}>
-              <X size={20} />
-            </IconButton>
-          </Box>
-
-          <Divider sx={{ mb: 3 }} />
-
-          {/* Filter Content */}
-          <Box sx={{ flex: 1, overflow: 'auto' }}>
-            {/* Property Type */}
-            <Box sx={{ mb: 4 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  color: '#0B1A2A',
-                  mb: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <Home size={16} />
-                Property Type
-              </Typography>
-              <FormControl fullWidth size="small">
-                <Select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  displayEmpty
-                  sx={{ fontFamily: '"Quicksand", sans-serif' }}
-                >
-                  {propertyTypeOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
             </Box>
 
-            {/* Bedrooms */}
-            <Box sx={{ mb: 4 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  color: '#0B1A2A',
-                  mb: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <Building2 size={16} />
-                Bedrooms
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {bedroomOptions.map((option) => (
-                  <Chip
-                    key={option.value}
-                    label={option.label}
-                    onClick={() => setSelectedBedrooms(option.value)}
-                    sx={{
-                      bgcolor: selectedBedrooms === option.value ? '#C6A962' : 'transparent',
-                      color: selectedBedrooms === option.value ? '#FFFFFF' : '#0B1A2A',
-                      border: '1px solid',
-                      borderColor: selectedBedrooms === option.value ? '#C6A962' : '#E2E8F0',
-                      fontFamily: '"Quicksand", sans-serif',
-                      '&:hover': {
-                        bgcolor: selectedBedrooms === option.value ? '#C6A962' : 'rgba(198, 169, 98, 0.1)',
-                      },
-                    }}
-                  />
-                ))}
-              </Box>
-            </Box>
+            {/* Available Units - Modified */}
+            {configurations.length > 0 && <AvailableUnitsSection configurations={configurations} />}
 
-            {/* Price Range */}
-            <Box sx={{ mb: 4 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  color: '#0B1A2A',
-                  mb: 1.5,
-                }}
-              >
-                Price Range
-              </Typography>
-              <Box sx={{ px: 1 }}>
-                <Slider
-                  value={priceRange}
-                  onChange={(_, newValue) => setPriceRange(newValue)}
-                  min={0}
-                  max={50000000}
-                  step={500000}
-                  valueLabelDisplay="auto"
-                  valueLabelFormat={formatPrice}
-                  sx={{
-                    color: '#C6A962',
-                    '& .MuiSlider-thumb': { bgcolor: '#C6A962' },
-                    '& .MuiSlider-track': { bgcolor: '#C6A962' },
-                  }}
-                />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '0.8rem', color: '#64748B', fontFamily: '"Quicksand", sans-serif' }}>
-                    {formatPrice(priceRange[0])}
+            {/* Payment Plan */}
+            {paymentPlan && <PaymentPlanBar paymentPlan={paymentPlan} bookingAmount={bookingAmount} />}
+
+            {/* Amenities */}
+            {amenities.length > 0 && <AmenitiesSection amenities={amenities} />}
+
+            {/* Location */}
+            <LocationSection nearbyLocations={nearbyLocations} locationLink={locationLink} location={location} projectName={projectName} />
+
+            {/* FAQs */}
+            {faqs.length > 0 && <FAQSection faqs={faqs} />}
+
+            {/* Developer */}
+            <Box sx={{ bgcolor: '#0B1A2A', borderRadius: 3, p: { xs: 2.5, md: 3 } }}>
+              <Typography variant="h2" sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' }, fontWeight: 700, color: '#FFFFFF', mb: 2, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>About Developer</Typography>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+                <Avatar src={developerLogo ? (developerLogo.startsWith('/') ? developerLogo : `/${developerLogo}`) : undefined} sx={{ width: { xs: 50, md: 70 }, height: { xs: 50, md: 70 }, border: '2px solid #C6A962', bgcolor: '#0F2237', fontSize: '1.25rem' }}>
+                  {developerName?.charAt(0) || '🏢'}
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: { xs: '1rem', md: '1.1rem' }, color: '#FFFFFF', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>{developerName}</Typography>
+                    <BadgeCheck size={18} color="#C6A962" />
+                  </Box>
+                  <Typography sx={{ fontSize: { xs: '0.8rem', md: '0.9rem' }, color: '#94A3B8', lineHeight: 1.7, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic' }}>
+                    {developerDesc || `${developerName} is one of the leading real estate developers in Dubai.`}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.8rem', color: '#64748B', fontFamily: '"Quicksand", sans-serif' }}>
-                    {formatPrice(priceRange[1])}
-                  </Typography>
+                  <Link href={`/developers/${developerSlug}`} style={{ textDecoration: 'none' }}>
+                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: '#C6A962', fontWeight: 600, mt: 1, fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                      View All Projects <ArrowRight size={16} />
+                    </Box>
+                  </Link>
                 </Box>
               </Box>
             </Box>
+          </Grid>
 
-            {/* Project Status */}
-            <Box sx={{ mb: 4 }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  color: '#0B1A2A',
-                  mb: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                }}
-              >
-                <MapPin size={16} />
-                Project Status
-              </Typography>
-              <FormControl fullWidth size="small">
-                <Select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  displayEmpty
-                  sx={{ fontFamily: '"Quicksand", sans-serif' }}
-                >
-                  {statusOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-          </Box>
+          {/* Sidebar - Desktop Only - Modified */}
+          <Grid size={{ xs: 12, md: 4 }} sx={{ display: { xs: 'none', md: 'block' } }}>
+            <SidebarForm phone1={phone1} brochure={brochure} />
+          </Grid>
+        </Grid>
+      </Container>
 
-          {/* Footer Actions */}
-          <Box sx={{ pt: 2, borderTop: '1px solid #E2E8F0' }}>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={resetFilters}
-                sx={{
-                  borderColor: '#E2E8F0',
-                  color: '#64748B',
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                }}
-              >
-                Reset
-              </Button>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={() => setFilterDrawerOpen(false)}
-                sx={{
-                  bgcolor: '#C6A962',
-                  color: '#FFFFFF',
-                  fontFamily: '"Quicksand", sans-serif',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { bgcolor: '#B89A52' },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Box>
+      {/* Lightbox */}
+      <Dialog open={lightboxOpen} onClose={() => setLightboxOpen(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { bgcolor: 'transparent', boxShadow: 'none', m: { xs: 1, md: 2 } } }}>
+        <DialogContent sx={{ p: 0, position: 'relative' }}>
+          <IconButton onClick={() => setLightboxOpen(false)} sx={{ position: 'absolute', top: 10, right: 10, bgcolor: '#0B1A2A', color: '#FFFFFF', zIndex: 10, '&:hover': { bgcolor: '#0F2237' } }}><X size={24} /></IconButton>
+          <Box component="img" src={projectImages[lightboxIndex]} alt={`${projectName} ${lightboxIndex + 1}`} sx={{ width: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: 2 }} />
+          <Box sx={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1 }}>
+            <IconButton onClick={() => setLightboxIndex((prev) => prev === 0 ? projectImages.length - 1 : prev - 1)} sx={{ bgcolor: '#0B1A2A', color: '#FFFFFF', '&:hover': { bgcolor: '#0F2237' } }}><ChevronLeft /></IconButton>
+            <IconButton onClick={() => setLightboxIndex((prev) => prev === projectImages.length - 1 ? 0 : prev + 1)} sx={{ bgcolor: '#0B1A2A', color: '#FFFFFF', '&:hover': { bgcolor: '#0F2237' } }}><ChevronRight /></IconButton>
           </Box>
-        </Box>
-      </Drawer>
+        </DialogContent>
+      </Dialog>
     </Box>
   );
-}
+};
+
+// ============ MAIN COMPONENT WITH PROVIDER ============
+const ProjectDetails = () => {
+  const params = useParams();
+  const { city, developer: developerSlug, project: projectSlug } = params;
+  const projectId = extractIdFromSlug(projectSlug);
+
+  const { project, loading, error, fetchProject } = useProject(projectId);
+
+  useEffect(() => {
+    if (projectId) fetchProject(projectId);
+  }, [projectId, fetchProject]);
+
+  if (loading) return <ProjectDetailsSkeleton />;
+
+  if (error) {
+    return (
+      <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, mt: 10, p: 3, bgcolor: '#0B1A2A' }}>
+        <Typography variant="h5" sx={{ fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', color: '#EF4444', textAlign: 'center' }}>{error}</Typography>
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <Button variant="contained" sx={{ bgcolor: '#C6A962', color: '#0B1A2A', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', mt: 2, '&:hover': { bgcolor: '#A68B4B' } }}>Back to Home</Button>
+        </Link>
+      </Box>
+    );
+  }
+
+  if (!project) {
+    return (
+      <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, mt: 10, p: 3, bgcolor: '#0B1A2A' }}>
+        <Typography variant="h4" sx={{ fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', color: '#FFFFFF', textAlign: 'center' }}>Project Not Found</Typography>
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <Button variant="contained" sx={{ bgcolor: '#C6A962', color: '#0B1A2A', fontFamily: '"Quicksand", sans-serif', fontStyle: 'italic', mt: 2, '&:hover': { bgcolor: '#A68B4B' } }}>Back to Home</Button>
+        </Link>
+      </Box>
+    );
+  }
+
+  const projectName = project.project_name;
+
+  return (
+    <LeadCaptureProvider projectId={projectId} projectName={projectName}>
+      <ProjectDetailsContent 
+        project={project} 
+        projectId={projectId} 
+        developerSlug={developerSlug} 
+      />
+    </LeadCaptureProvider>
+  );
+};
+
+export default ProjectDetails;

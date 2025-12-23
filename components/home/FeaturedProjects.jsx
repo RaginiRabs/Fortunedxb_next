@@ -134,13 +134,6 @@
     const handleInquiry = (projectId) => {
       console.log('Inquiry for project:', projectId);
     };
-
-    // Total count for button
-    // const totalCount = projects?.length || 0;
-
-    // Total count for button (all projects, not just featured)
-    const totalCount = projects?.length || 0;
-    
     // Featured count
     const featuredCount = projects?.filter((p) => p.featured === 1 || p.featured === true)?.length || 0;
 
@@ -334,7 +327,7 @@
                 },
               }}
             >
-              View All {totalCount}+ Projects
+              View All  Projects
             </Button>
           </Box>
         </Container>
